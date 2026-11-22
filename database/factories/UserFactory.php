@@ -9,23 +9,13 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
-/**
- * Factory untuk model User. Default: penyewa berstatus approved.
- *
- * @extends Factory<User>
- */
+// factory untuk membuat data user palsu
 class UserFactory extends Factory
 {
-    /**
-     * Password ter-hash yang dipakai ulang agar factory cepat.
-     */
+    // password yang dipakai ulang supaya factory cepat
     protected static ?string $password;
 
-    /**
-     * Definisi atribut default.
-     *
-     * @return array<string, mixed>
-     */
+    // function untuk data default factory
     public function definition(): array
     {
         return [
@@ -41,11 +31,7 @@ class UserFactory extends Factory
         ];
     }
 
-    /**
-     * State: akun admin (tanpa NIK, selalu approved).
-     *
-     * @return static
-     */
+    // function untuk membuat data akun admin
     public function admin(): static
     {
         return $this->state(fn () => [
@@ -55,31 +41,19 @@ class UserFactory extends Factory
         ]);
     }
 
-    /**
-     * State: penyewa yang sudah disetujui.
-     *
-     * @return static
-     */
+    // function untuk membuat data penyewa yang sudah disetujui
     public function approved(): static
     {
         return $this->state(fn () => ['status' => UserStatus::Approved]);
     }
 
-    /**
-     * State: penyewa yang menunggu verifikasi.
-     *
-     * @return static
-     */
+    // function untuk membuat data penyewa yang menunggu verifikasi
     public function pending(): static
     {
         return $this->state(fn () => ['status' => UserStatus::Pending]);
     }
 
-    /**
-     * State: penyewa yang pendaftarannya ditolak.
-     *
-     * @return static
-     */
+    // function untuk membuat data penyewa yang ditolak
     public function rejected(): static
     {
         return $this->state(fn () => ['status' => UserStatus::Rejected]);

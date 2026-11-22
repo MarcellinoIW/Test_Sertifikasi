@@ -2,19 +2,13 @@
 
 namespace App\Enums;
 
-/**
- * Peran (role) pengguna aplikasi.
- */
+// enum untuk role user (admin / penyewa)
 enum UserRole: string
 {
     case Admin = 'admin';
     case Tenant = 'tenant';
 
-    /**
-     * Label berbahasa Indonesia untuk ditampilkan di UI.
-     *
-     * @return string
-     */
+    // function untuk menampilkan label dalam bahasa Indonesia
     public function label(): string
     {
         return match ($this) {

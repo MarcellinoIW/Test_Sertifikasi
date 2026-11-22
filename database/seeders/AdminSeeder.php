@@ -7,14 +7,10 @@ use App\Enums\UserStatus;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
-/**
- * Membuat satu akun admin: admin@garasi.test / password.
- */
+// seeder untuk membuat akun admin
 class AdminSeeder extends Seeder
 {
-    /**
-     * Jalankan seeder.
-     */
+    // function untuk membuat akun admin
     public function run(): void
     {
         User::query()->updateOrCreate(

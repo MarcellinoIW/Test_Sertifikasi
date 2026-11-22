@@ -3,22 +3,13 @@
 namespace Database\Factories;
 
 use App\Models\Rental;
-use App\Models\RentalExtension;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * Factory untuk model RentalExtension. Default: perpanjangan 5 hari harian.
- *
- * @extends Factory<RentalExtension>
- */
+// factory untuk membuat data perpanjangan palsu
 class RentalExtensionFactory extends Factory
 {
-    /**
-     * Definisi atribut default.
-     *
-     * @return array<string, mixed>
-     */
+    // function untuk data default factory
     public function definition(): array
     {
         return [

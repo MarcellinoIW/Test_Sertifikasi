@@ -2,99 +2,60 @@
 
 namespace App\Services;
 
-use App\DataTransferObjects\ExtensionBreakdown;
-use App\DataTransferObjects\RentalQuote;
 use App\Enums\GarageType;
 use App\Enums\RentalType;
 use App\Enums\VehicleType;
-use App\Exceptions\BusinessRuleException;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Validation\ValidationException;
 
-/**
- * Kalkulator harga sewa garasi. Seluruh method adalah fungsi murni
- * (tanpa akses DB) sehingga mudah di-unit-test.
- *
- * Aturan:
- * - Harian: maksimal (jumlah hari bulan berjalan - 1) hari, biaya = hari x harga harian.
- * - Bulanan: jumlah hari = jumlah hari bulan berjalan, biaya = 25 x harga harian.
- * - Listrik: hanya mobil listrik di garasi electric, biaya = (kapasitas - sisa) x harga/kWh.
- * - Perpanjangan: per blok bulan kalender dari tanggal selesai lama (lihat extensionCost()).
- */
+// service untuk menghitung harga sewa, biaya listrik, dan biaya perpanjangan
 class RentalPriceCalculator
 {
-    /**
-     * @param  int  $monthlyMultiplier  Pengali harga harian untuk tarif bulanan.
-     * @param  float  $batteryCapacityKwh  Kapasitas baterai mobil listrik (kWh).
-     */
-    public function __construct(
-        private readonly int $monthlyMultiplier = 25,
-        private readonly float $batteryCapacityKwh = 100,
-    ) {}
+    // pengali harga bulanan
+    private readonly int $monthlyMultiplier;
 
-    /**
-     * Pengali tarif bulanan yang dipakai kalkulator.
-     *
-     * @return int
-     */
+    // kapasitas baterai mobil listrik (kWh)
+    private readonly float $batteryCapacityKwh;
+
+    // function constructor untuk mengambil pengali bulanan dan kapasitas baterai
+    public function __construct(?int $monthlyMultiplier = null, ?float $batteryCapacityKwh = null)
+    {
+        $this->monthlyMultiplier = $monthlyMultiplier ?? (int) config('garasi.monthly_multiplier');
+        $this->batteryCapacityKwh = $batteryCapacityKwh ?? (float) config('garasi.battery_capacity_kwh');
+    }
+
+    // function untuk mengambil pengali harga bulanan
     public function monthlyMultiplier(): int
     {
         return $this->monthlyMultiplier;
     }
 
-    /**
-     * Kapasitas baterai mobil listrik yang dipakai kalkulator.
-     *
-     * @return float
-     */
+    // function untuk mengambil kapasitas baterai mobil listrik
     public function batteryCapacityKwh(): float
     {
         return $this->batteryCapacityKwh;
     }
 
-    /**
-     * Batas maksimal hari untuk sewa harian = jumlah hari di bulan tanggal tersebut - 1.
-     * Contoh: November -> 29, Januari -> 30, Februari 2028 (kabisat) -> 28.
-     *
-     * @param  CarbonInterface  $date  Tanggal acuan (biasanya hari ini).
-     * @return int
-     */
+    // function untuk menghitung batas maksimal hari sewa harian
     public function maxDailyDays(CarbonInterface $date): int
     {
         return $date->daysInMonth - 1;
     }
 
-    /**
-     * Jumlah hari sewa bulanan = jumlah hari di bulan tanggal tersebut.
-     * Contoh: November -> 30, Februari 2028 -> 29.
-     *
-     * @param  CarbonInterface  $date  Tanggal acuan (biasanya hari ini).
-     * @return int
-     */
+    // function untuk menghitung jumlah hari sewa bulanan
     public function monthlyDays(CarbonInterface $date): int
     {
         return $date->daysInMonth;
     }
 
-    /**
-     * Harga satu bulan = pengali bulanan x harga harian.
-     *
-     * @param  float  $dailyPrice  Harga harian.
-     * @return float
-     */
+    // function untuk menghitung harga sewa bulanan
     public function monthlyPrice(float $dailyPrice): float
     {
         return round($this->monthlyMultiplier * $dailyPrice, 2);
     }
 
-    /**
-     * Biaya sewa sesuai jenis sewa.
-     *
-     * @param  RentalType  $type  Jenis sewa.
-     * @param  int  $days  Jumlah hari (diabaikan untuk bulanan).
-     * @param  float  $dailyPrice  Harga harian.
-     * @return float
-     */
+    // function untuk menghitung biaya sewa
     public function rentCost(RentalType $type, int $days, float $dailyPrice): float
     {
         return match ($type) {
@@ -103,39 +64,19 @@ class RentalPriceCalculator
         };
     }
 
-    /**
-     * Apakah pengisian listrik berlaku: hanya mobil listrik di garasi electric.
-     *
-     * @param  VehicleType  $vehicleType  Tipe kendaraan.
-     * @param  GarageType  $garageType  Tipe garasi.
-     * @return bool
-     */
+    // function untuk mengecek apakah kena biaya isi listrik
     public function chargesElectricity(VehicleType $vehicleType, GarageType $garageType): bool
     {
         return $vehicleType->isElectric() && $garageType->hasCharging();
     }
 
-    /**
-     * Jumlah kWh yang diisi = kapasitas baterai - sisa baterai (minimal 0).
-     *
-     * @param  float  $batteryRemainingKwh  Sisa baterai (kWh).
-     * @return float
-     */
+    // function untuk menghitung jumlah kWh yang diisi
     public function chargedKwh(float $batteryRemainingKwh): float
     {
         return round(max(0, $this->batteryCapacityKwh - $batteryRemainingKwh), 2);
     }
 
-    /**
-     * Biaya isi listrik. Nol jika kendaraan bukan mobil listrik atau garasi bukan tipe electric.
-     * Contoh: sisa 30 kWh, Rp 2.500/kWh -> (100 - 30) x 2.500 = Rp 175.000.
-     *
-     * @param  VehicleType  $vehicleType  Tipe kendaraan.
-     * @param  GarageType  $garageType  Tipe garasi.
-     * @param  float|null  $batteryRemainingKwh  Sisa baterai (kWh).
-     * @param  float|null  $pricePerKwh  Harga isi listrik per kWh.
-     * @return float
-     */
+    // function untuk menghitung biaya isi listrik
     public function electricityCost(VehicleType $vehicleType, GarageType $garageType, ?float $batteryRemainingKwh, ?float $pricePerKwh): float
     {
         if (! $this->chargesElectricity($vehicleType, $garageType) || $batteryRemainingKwh === null || $pricePerKwh === null) {
@@ -145,21 +86,7 @@ class RentalPriceCalculator
         return round($this->chargedKwh($batteryRemainingKwh) * $pricePerKwh, 2);
     }
 
-    /**
-     * Menghitung seluruh biaya sewa baru.
-     *
-     * @param  RentalType  $type  Jenis sewa.
-     * @param  int|null  $days  Jumlah hari (wajib untuk harian; diabaikan untuk bulanan).
-     * @param  CarbonInterface  $startDate  Tanggal mulai (hari ini).
-     * @param  float  $dailyPrice  Harga harian garasi.
-     * @param  VehicleType  $vehicleType  Tipe kendaraan.
-     * @param  GarageType  $garageType  Tipe garasi.
-     * @param  float|null  $batteryRemainingKwh  Sisa baterai (khusus mobil listrik).
-     * @param  float|null  $pricePerKwh  Harga isi listrik per kWh garasi.
-     * @return RentalQuote
-     *
-     * @throws BusinessRuleException Jika jumlah hari sewa harian di luar batas.
-     */
+    // function untuk menghitung total harga sewa
     public function quote(
         RentalType $type,
         ?int $days,
@@ -169,13 +96,13 @@ class RentalPriceCalculator
         GarageType $garageType,
         ?float $batteryRemainingKwh = null,
         ?float $pricePerKwh = null,
-    ): RentalQuote {
+    ): array {
         $start = CarbonImmutable::instance($startDate)->startOfDay();
 
         if ($type === RentalType::Daily) {
             $max = $this->maxDailyDays($start);
             if ($days === null || $days < 1 || $days > $max) {
-                throw new BusinessRuleException("Jumlah hari sewa harian harus antara 1 sampai {$max} hari.", 'days');
+                throw ValidationException::withMessages(['days' => "Jumlah hari sewa harian harus antara 1 sampai {$max} hari."]);
             }
         } else {
             $days = $this->monthlyDays($start);
@@ -185,43 +112,26 @@ class RentalPriceCalculator
         $charges = $this->chargesElectricity($vehicleType, $garageType);
         $electricityCost = $this->electricityCost($vehicleType, $garageType, $batteryRemainingKwh, $pricePerKwh);
 
-        return new RentalQuote(
-            rentalType: $type,
-            days: $days,
-            startDate: $start,
-            endDate: $start->addDays($days),
-            dailyPrice: $dailyPrice,
-            rentCost: $rentCost,
-            batteryRemainingKwh: $vehicleType->isElectric() ? $batteryRemainingKwh : null,
-            chargedKwh: $charges && $batteryRemainingKwh !== null ? $this->chargedKwh($batteryRemainingKwh) : null,
-            electricityPricePerKwh: $charges ? $pricePerKwh : null,
-            electricityCost: $electricityCost,
-            totalCost: round($rentCost + $electricityCost, 2),
-        );
+        return [
+            'rental_type' => $type,
+            'days' => $days,
+            'start_date' => $start,
+            'end_date' => $start->addDays($days),
+            'daily_price' => $dailyPrice,
+            'rent_cost' => $rentCost,
+            'battery_remaining_kwh' => $vehicleType->isElectric() ? $batteryRemainingKwh : null,
+            'charged_kwh' => $charges && $batteryRemainingKwh !== null ? $this->chargedKwh($batteryRemainingKwh) : null,
+            'electricity_price_per_kwh' => $charges ? $pricePerKwh : null,
+            'electricity_cost' => $electricityCost,
+            'total_cost' => round($rentCost + $electricityCost, 2),
+        ];
     }
 
-    /**
-     * Biaya perpanjangan sewa dengan algoritma blok bulan kalender:
-     *
-     *     cursor = tanggal selesai lama; sisa = tambahan hari
-     *     selama sisa > 0:
-     *         dim = jumlah hari di bulan milik cursor
-     *         jika sisa >= dim: biaya += 25 x harian; cursor += dim hari; sisa -= dim
-     *         selain itu:       biaya += sisa x harian; sisa = 0
-     *
-     * Contoh: selesai 25 Des + 45 hari -> 1 blok bulan + 14 hari harian.
-     *
-     * @param  CarbonInterface  $oldEnd  Tanggal selesai lama.
-     * @param  int  $days  Tambahan hari (minimal 1).
-     * @param  float  $dailyPrice  Harga harian (snapshot rental).
-     * @return ExtensionBreakdown
-     *
-     * @throws BusinessRuleException Jika tambahan hari kurang dari 1.
-     */
-    public function extensionCost(CarbonInterface $oldEnd, int $days, float $dailyPrice): ExtensionBreakdown
+    // function untuk menghitung biaya perpanjangan sewa
+    public function extensionCost(CarbonInterface $oldEnd, int $days, float $dailyPrice): array
     {
         if ($days < 1) {
-            throw new BusinessRuleException('Tambahan hari minimal 1 hari.', 'additional_days');
+            throw ValidationException::withMessages(['additional_days' => 'Tambahan hari minimal 1 hari.']);
         }
 
         $start = CarbonImmutable::instance($oldEnd)->startOfDay();
@@ -246,14 +156,19 @@ class RentalPriceCalculator
             }
         }
 
-        return new ExtensionBreakdown(
-            oldEndDate: $start,
-            newEndDate: $start->addDays($days),
-            additionalDays: $days,
-            monthlyBlocks: $monthlyBlocks,
-            dailyDays: $dailyDays,
-            dailyPrice: $dailyPrice,
-            cost: round($cost, 2),
-        );
+        $cost = round($cost, 2);
+        $dailySubtotal = round($dailyDays * $dailyPrice, 2);
+
+        return [
+            'old_end_date' => $start,
+            'new_end_date' => $start->addDays($days),
+            'additional_days' => $days,
+            'monthly_blocks' => $monthlyBlocks,
+            'daily_days' => $dailyDays,
+            'daily_price' => $dailyPrice,
+            'monthly_subtotal' => round($cost - $dailySubtotal, 2),
+            'daily_subtotal' => $dailySubtotal,
+            'cost' => $cost,
+        ];
     }
 }

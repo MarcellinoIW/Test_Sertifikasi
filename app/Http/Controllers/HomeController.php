@@ -5,17 +5,10 @@ namespace App\Http\Controllers;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
-/**
- * Halaman root: arahkan ke dashboard sesuai role, atau ke login untuk tamu.
- */
+// controller untuk halaman awal (/)
 class HomeController extends Controller
 {
-    /**
-     * Tangani request ke "/".
-     *
-     * @param  Request  $request  Request saat ini.
-     * @return RedirectResponse
-     */
+    // function untuk mengarahkan user ke halaman sesuai role
     public function __invoke(Request $request): RedirectResponse
     {
         $user = $request->user();

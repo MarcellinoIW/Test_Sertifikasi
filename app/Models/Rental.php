@@ -4,45 +4,26 @@ namespace App\Models;
 
 use App\Enums\RentalType;
 use Carbon\CarbonInterface;
-use Database\Factories\RentalFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 
-/**
- * Transaksi sewa garasi. Rental aktif pada tanggal D jika
- * start_date <= D < end_date (end_date bersifat eksklusif).
- *
- * @property int $id
- * @property int $user_id
- * @property int $garage_id
- * @property int $vehicle_id
- * @property RentalType $rental_type
- * @property int $days
- * @property Carbon $start_date
- * @property Carbon $end_date
- * @property string $daily_price
- * @property string $rent_cost
- * @property string|null $battery_remaining_kwh
- * @property string|null $charged_kwh
- * @property string|null $electricity_price_per_kwh
- * @property string $electricity_cost
- * @property string $total_cost
- * @property string $payment_proof
- */
+// model untuk data sewa garasi
 class Rental extends Model
 {
-    /** @use HasFactory<RentalFactory> */
     use HasFactory;
 
-    /**
-     * Atribut yang boleh diisi secara massal.
-     *
-     * @var list<string>
-     */
+    // daftar status sewa beserta labelnya
+    public const STATUSES = [
+        'upcoming' => 'Akan Datang',
+        'active' => 'Aktif',
+        'finished' => 'Selesai',
+    ];
+
+    // kolom yang boleh diisi
     protected $fillable = [
         'user_id',
         'garage_id',
@@ -61,11 +42,7 @@ class Rental extends Model
         'payment_proof',
     ];
 
-    /**
-     * Konversi tipe atribut.
-     *
-     * @return array<string, string>
-     */
+    // function untuk mengatur tipe data kolom
     protected function casts(): array
     {
         return [
@@ -83,53 +60,31 @@ class Rental extends Model
         ];
     }
 
-    /**
-     * Penyewa pemilik rental.
-     *
-     * @return BelongsTo<User, $this>
-     */
+    // function relasi sewa ke penyewa
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Garasi yang disewa.
-     *
-     * @return BelongsTo<Garage, $this>
-     */
+    // function relasi sewa ke garasi
     public function garage(): BelongsTo
     {
         return $this->belongsTo(Garage::class);
     }
 
-    /**
-     * Kendaraan yang dititipkan.
-     *
-     * @return BelongsTo<Vehicle, $this>
-     */
+    // function relasi sewa ke kendaraan
     public function vehicle(): BelongsTo
     {
         return $this->belongsTo(Vehicle::class);
     }
 
-    /**
-     * Riwayat perpanjangan rental ini.
-     *
-     * @return HasMany<RentalExtension, $this>
-     */
+    // function relasi sewa ke data perpanjangan
     public function extensions(): HasMany
     {
         return $this->hasMany(RentalExtension::class);
     }
 
-    /**
-     * Scope: rental yang aktif pada tanggal tertentu (start_date <= D < end_date).
-     *
-     * @param  Builder<Rental>  $query
-     * @param  CarbonInterface  $date  Tanggal acuan.
-     * @return Builder<Rental>
-     */
+    // function untuk filter sewa yang aktif pada tanggal tertentu
     public function scopeActiveOn(Builder $query, CarbonInterface $date): Builder
     {
         $day = $date->toDateString();
@@ -138,34 +93,50 @@ class Rental extends Model
             ->whereDate('end_date', '>', $day);
     }
 
-    /**
-     * Apakah rental aktif pada tanggal tertentu.
-     *
-     * @param  CarbonInterface  $date  Tanggal acuan.
-     * @return bool
-     */
+    // function untuk filter sewa yang periodenya bentrok
+    public function scopeOverlapping(Builder $query, CarbonInterface $start, CarbonInterface $end): Builder
+    {
+        return $query->whereDate('start_date', '<', $end->toDateString())
+            ->whereDate('end_date', '>', $start->toDateString());
+    }
+
+    // function untuk filter sewa yang belum selesai
+    public function scopeNotFinishedOn(Builder $query, CarbonInterface $date): Builder
+    {
+        return $query->whereDate('end_date', '>', $date->toDateString());
+    }
+
+    // function untuk filter sewa berdasarkan status
+    public function scopeWithStatusOn(Builder $query, string $status, CarbonInterface $date): Builder
+    {
+        $day = $date->toDateString();
+
+        return match ($status) {
+            'upcoming' => $query->whereDate('start_date', '>', $day),
+            'active' => $query->activeOn($date),
+            'finished' => $query->whereDate('end_date', '<=', $day),
+        };
+    }
+
+    // function untuk mengecek sewa aktif pada tanggal tertentu
     public function isActiveOn(CarbonInterface $date): bool
+    {
+        return $this->statusOn($date) === 'active';
+    }
+
+    // function untuk menentukan status sewa (akan datang / aktif / selesai)
+    public function statusOn(CarbonInterface $date): string
     {
         $day = $date->copy()->startOfDay();
 
-        return $this->start_date->lte($day) && $this->end_date->gt($day);
+        return match (true) {
+            $this->start_date->gt($day) => 'upcoming',
+            $this->end_date->gt($day) => 'active',
+            default => 'finished',
+        };
     }
 
-    /**
-     * URL publik gambar bukti pelunasan.
-     *
-     * @return string
-     */
-    public function paymentProofUrl(): string
-    {
-        return asset('storage/'.$this->payment_proof);
-    }
-
-    /**
-     * Total yang dibayar penyewa: biaya sewa awal + listrik + seluruh perpanjangan.
-     *
-     * @return float
-     */
+    // function untuk menghitung total bayar termasuk perpanjangan
     public function grandTotal(): float
     {
         $extensions = $this->relationLoaded('extensions')
@@ -173,5 +144,17 @@ class Rental extends Model
             : $this->extensions()->sum('cost');
 
         return (float) $this->total_cost + (float) $extensions;
+    }
+
+    // function untuk mengambil link gambar bukti bayar
+    public function paymentProofUrl(): string
+    {
+        return asset('storage/'.$this->payment_proof);
+    }
+
+    // function untuk mengecek file bukti bayar ada atau tidak
+    public function hasPaymentProofFile(): bool
+    {
+        return filled($this->payment_proof) && Storage::disk('public')->exists($this->payment_proof);
     }
 }

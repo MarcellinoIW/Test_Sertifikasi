@@ -2,20 +2,14 @@
 
 namespace App\Enums;
 
-/**
- * Tipe garasi beserta prefix kode garasinya.
- */
+// enum untuk tipe garasi (S / C / E)
 enum GarageType: string
 {
     case Bicycle = 'bicycle';
     case Car = 'car';
     case Electric = 'electric';
 
-    /**
-     * Prefix huruf untuk kode garasi (misal S001, C010, E005).
-     *
-     * @return string
-     */
+    // function untuk mengambil huruf depan kode garasi (S / C / E)
     public function prefix(): string
     {
         return match ($this) {
@@ -25,11 +19,7 @@ enum GarageType: string
         };
     }
 
-    /**
-     * Label berbahasa Indonesia untuk ditampilkan di UI.
-     *
-     * @return string
-     */
+    // function untuk menampilkan label dalam bahasa Indonesia
     public function label(): string
     {
         return match ($this) {
@@ -39,22 +29,13 @@ enum GarageType: string
         };
     }
 
-    /**
-     * Apakah garasi tipe ini menyediakan pengisian listrik (dan karenanya
-     * wajib memiliki harga per kWh).
-     *
-     * @return bool
-     */
+    // function untuk mengecek garasi punya fasilitas isi listrik atau tidak
     public function hasCharging(): bool
     {
         return $this === self::Electric;
     }
 
-    /**
-     * Daftar nilai enum, berguna untuk aturan validasi `in:`.
-     *
-     * @return array<int, string>
-     */
+    // function untuk mengambil semua nilai enum
     public static function values(): array
     {
         return array_column(self::cases(), 'value');

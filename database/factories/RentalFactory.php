@@ -4,26 +4,16 @@ namespace Database\Factories;
 
 use App\Enums\RentalType;
 use App\Models\Garage;
-use App\Models\Rental;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\RentalPriceCalculator;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * Factory untuk model Rental. Default: sewa harian 3 hari mulai hari ini
- * di garasi mobil, dengan biaya konsisten terhadap harga harian.
- *
- * @extends Factory<Rental>
- */
+// factory untuk membuat data sewa palsu
 class RentalFactory extends Factory
 {
-    /**
-     * Definisi atribut default.
-     *
-     * @return array<string, mixed>
-     */
+    // function untuk data default factory
     public function definition(): array
     {
         $days = 3;
@@ -50,14 +40,7 @@ class RentalFactory extends Factory
         ];
     }
 
-    /**
-     * State: sewa harian pada tanggal mulai dan jumlah hari tertentu.
-     * Biaya dihitung ulang dari harga harian snapshot.
-     *
-     * @param  CarbonInterface  $start  Tanggal mulai.
-     * @param  int  $days  Jumlah hari.
-     * @return static
-     */
+    // function untuk membuat data sewa harian
     public function daily(CarbonInterface $start, int $days): static
     {
         return $this->state(function (array $attributes) use ($start, $days) {
@@ -74,13 +57,7 @@ class RentalFactory extends Factory
         });
     }
 
-    /**
-     * State: sewa bulanan mulai tanggal tertentu (jumlah hari = jumlah hari
-     * di bulan tanggal mulai, biaya = pengali bulanan x harga harian).
-     *
-     * @param  CarbonInterface  $start  Tanggal mulai.
-     * @return static
-     */
+    // function untuk membuat data sewa bulanan
     public function monthly(CarbonInterface $start): static
     {
         return $this->state(function (array $attributes) use ($start) {

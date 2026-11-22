@@ -7,9 +7,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Membuat tabel vehicles (kendaraan milik penyewa).
-     */
+    // function untuk membuat tabel vehicles
     public function up(): void
     {
         Schema::create('vehicles', function (Blueprint $table) {
@@ -25,9 +23,7 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Menghapus tabel vehicles.
-     */
+    // function untuk menghapus tabel vehicles
     public function down(): void
     {
         Schema::dropIfExists('vehicles');

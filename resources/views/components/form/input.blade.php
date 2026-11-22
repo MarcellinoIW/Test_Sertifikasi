@@ -15,7 +15,13 @@
 @php
     $id = $attributes->get('id', $name);
     $hasError = $errors->has($name);
-    $fieldValue = $type === 'password' ? null : old($name, $value);
+    $fieldValue = in_array($type, ['password', 'file'], true) ? null : old($name, $value);
+
+    // Semua input file otomatis dibatasi ukurannya di browser (lihat script di layout),
+    // memakai batas yang sama dengan validasi server: config('garasi.max_upload_kb').
+    if ($type === 'file' && ! $attributes->has('data-max-size')) {
+        $attributes = $attributes->merge(['data-max-size' => config('garasi.max_upload_kb') * 1024]);
+    }
 @endphp
 
 <div class="mb-3">

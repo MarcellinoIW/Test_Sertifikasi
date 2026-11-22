@@ -3,31 +3,21 @@
 namespace App\Http\Requests\Admin;
 
 use App\Enums\GarageType;
-use App\Services\GarageCodeGenerator;
+use App\Services\GarageService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
-/**
- * Validasi form pembuatan garasi secara batch.
- */
+// request untuk validasi form tambah garasi
 class StoreGarageBatchRequest extends FormRequest
 {
-    /**
-     * Hanya admin (sudah dijamin middleware role:admin).
-     *
-     * @return bool
-     */
+    // function untuk mengecek user boleh pakai request ini
     public function authorize(): bool
     {
         return $this->user()?->isAdmin() ?? false;
     }
 
-    /**
-     * Aturan validasi.
-     *
-     * @return array<string, array<int, mixed>>
-     */
+    // function untuk aturan validasi form tambah garasi
     public function rules(): array
     {
         return [
@@ -44,11 +34,7 @@ class StoreGarageBatchRequest extends FormRequest
         ];
     }
 
-    /**
-     * Validasi tambahan: nomor terakhir + jumlah tidak boleh melebihi 999.
-     *
-     * @return array<int, callable>
-     */
+    // function untuk validasi tambahan (cek sisa kuota nomor garasi)
     public function after(): array
     {
         return [
@@ -58,7 +44,7 @@ class StoreGarageBatchRequest extends FormRequest
                     return;
                 }
 
-                $remaining = app(GarageCodeGenerator::class)->remaining($type);
+                $remaining = app(GarageService::class)->remaining($type);
                 if ($this->integer('quantity') > $remaining) {
                     $validator->errors()->add(
                         'quantity',
@@ -69,11 +55,7 @@ class StoreGarageBatchRequest extends FormRequest
         ];
     }
 
-    /**
-     * Pesan error berbahasa Indonesia.
-     *
-     * @return array<string, string>
-     */
+    // function untuk pesan error validasi
     public function messages(): array
     {
         return [
@@ -94,21 +76,13 @@ class StoreGarageBatchRequest extends FormRequest
         ];
     }
 
-    /**
-     * Tipe garasi tervalidasi sebagai enum.
-     *
-     * @return GarageType
-     */
+    // function untuk mengambil tipe garasi yang dipilih
     public function garageType(): GarageType
     {
         return $this->enum('type', GarageType::class);
     }
 
-    /**
-     * Harga per kWh tervalidasi; null untuk tipe selain electric.
-     *
-     * @return float|null
-     */
+    // function untuk mengambil harga listrik per kWh (khusus garasi listrik)
     public function electricityPrice(): ?float
     {
         return $this->garageType()->hasCharging() ? $this->float('electricity_price_per_kwh') : null;

@@ -2,19 +2,13 @@
 
 namespace App\Enums;
 
-/**
- * Status ketersediaan garasi.
- */
+// enum untuk status garasi (tersedia / terpakai)
 enum GarageStatus: string
 {
     case Available = 'available';
     case Used = 'used';
 
-    /**
-     * Label berbahasa Indonesia untuk ditampilkan di UI.
-     *
-     * @return string
-     */
+    // function untuk menampilkan label dalam bahasa Indonesia
     public function label(): string
     {
         return match ($this) {
@@ -23,11 +17,7 @@ enum GarageStatus: string
         };
     }
 
-    /**
-     * Warna badge Bootstrap yang sesuai dengan status.
-     *
-     * @return string
-     */
+    // function untuk menentukan warna badge di tampilan
     public function badgeClass(): string
     {
         return match ($this) {

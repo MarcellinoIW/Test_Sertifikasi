@@ -18,7 +18,10 @@
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div>
                         <div class="text-muted small">Sewa Aktif</div>
-                        <div class="fs-3 fw-semibold">{{ $active_rentals->count() }}</div>
+                        <div class="fs-3 fw-semibold">{{ $active_count }}</div>
+                        @if ($upcoming_count > 0)
+                            <div class="small text-info">+{{ $upcoming_count }} akan datang</div>
+                        @endif
                     </div>
                     <i class="bi bi-calendar-check text-success"></i>
                 </div>
@@ -50,7 +53,7 @@
 
     <div class="card border-0 shadow-sm">
         <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-house-check me-1"></i> Garasi yang Sedang Disewa</span>
+            <span><i class="bi bi-house-check me-1"></i> Sewa Aktif &amp; Akan Datang</span>
             @if (Route::has('tenant.rentals.index'))
                 <a href="{{ route('tenant.rentals.index') }}" class="small">Lihat semua sewa</a>
             @endif
@@ -64,11 +67,13 @@
                         <th>Jenis</th>
                         <th>Mulai</th>
                         <th>Selesai</th>
-                        <th class="text-end">Sisa Hari</th>
+                        <th>Status</th>
+                        <th class="text-end">Keterangan</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($active_rentals as $rental)
+                    @forelse ($current_rentals as $rental)
+                        @php $status = $rental->statusOn($today); @endphp
                         <tr>
                             <td>
                                 <span class="badge text-bg-primary">{{ $rental->garage->code }}</span>
@@ -78,12 +83,19 @@
                             <td>{{ $rental->rental_type->label() }}</td>
                             <td>@tanggal($rental->start_date)</td>
                             <td>@tanggal($rental->end_date)</td>
-                            <td class="text-end">{{ (int) today()->diffInDays($rental->end_date) }} hari</td>
+                            <td><x-rental-status :status="$status" /></td>
+                            <td class="text-end small">
+                                @if ($status === 'upcoming')
+                                    mulai {{ (int) $today->diffInDays($rental->start_date) }} hari lagi
+                                @else
+                                    sisa {{ (int) $today->diffInDays($rental->end_date) }} hari
+                                @endif
+                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-4">
-                                Anda belum memiliki sewa aktif.
+                            <td colspan="7" class="text-center text-muted py-4">
+                                Anda belum memiliki sewa aktif atau yang akan datang.
                             </td>
                         </tr>
                     @endforelse

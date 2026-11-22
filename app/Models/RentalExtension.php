@@ -2,37 +2,17 @@
 
 namespace App\Models;
 
-use Database\Factories\RentalExtensionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 
-/**
- * Riwayat perpanjangan sewa yang diproses oleh admin.
- *
- * @property int $id
- * @property int $rental_id
- * @property int $admin_id
- * @property Carbon $old_end_date
- * @property Carbon $new_end_date
- * @property int $additional_days
- * @property int $monthly_blocks
- * @property int $daily_days
- * @property string $cost
- * @property string $payment_proof
- * @property Carbon $created_at
- */
+// model untuk data perpanjangan sewa
 class RentalExtension extends Model
 {
-    /** @use HasFactory<RentalExtensionFactory> */
     use HasFactory;
 
-    /**
-     * Atribut yang boleh diisi secara massal.
-     *
-     * @var list<string>
-     */
+    // kolom yang boleh diisi
     protected $fillable = [
         'rental_id',
         'admin_id',
@@ -45,11 +25,7 @@ class RentalExtension extends Model
         'payment_proof',
     ];
 
-    /**
-     * Konversi tipe atribut.
-     *
-     * @return array<string, string>
-     */
+    // function untuk mengatur tipe data kolom
     protected function casts(): array
     {
         return [
@@ -62,33 +38,27 @@ class RentalExtension extends Model
         ];
     }
 
-    /**
-     * URL publik gambar bukti bayar perpanjangan.
-     *
-     * @return string
-     */
-    public function paymentProofUrl(): string
-    {
-        return asset('storage/'.$this->payment_proof);
-    }
-
-    /**
-     * Rental yang diperpanjang.
-     *
-     * @return BelongsTo<Rental, $this>
-     */
+    // function relasi perpanjangan ke data sewa
     public function rental(): BelongsTo
     {
         return $this->belongsTo(Rental::class);
     }
 
-    /**
-     * Admin yang memproses perpanjangan.
-     *
-     * @return BelongsTo<User, $this>
-     */
+    // function relasi perpanjangan ke admin yang memproses
     public function admin(): BelongsTo
     {
         return $this->belongsTo(User::class, 'admin_id');
+    }
+
+    // function untuk mengambil link gambar bukti bayar
+    public function paymentProofUrl(): string
+    {
+        return asset('storage/'.$this->payment_proof);
+    }
+
+    // function untuk mengecek file bukti bayar ada atau tidak
+    public function hasPaymentProofFile(): bool
+    {
+        return filled($this->payment_proof) && Storage::disk('public')->exists($this->payment_proof);
     }
 }

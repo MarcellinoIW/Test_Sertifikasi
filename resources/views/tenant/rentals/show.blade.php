@@ -10,14 +10,14 @@
 @endsection
 
 @section('content')
-    @php $isActive = $rental->isActiveOn(today()); @endphp
+    @php $status = $rental->statusOn(today()); @endphp
 
     <div class="row g-3">
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm mb-3">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
                     <span class="fw-semibold"><i class="bi bi-info-circle me-1"></i> Informasi Sewa</span>
-                    <span class="badge text-bg-{{ $isActive ? 'success' : 'secondary' }}">{{ $isActive ? 'Aktif' : 'Selesai' }}</span>
+                    <x-rental-status :status="$status" />
                 </div>
                 <div class="card-body">
                     <dl class="row mb-0">
@@ -51,6 +51,7 @@
                                 <th>Selesai Lama → Baru</th>
                                 <th>Rincian</th>
                                 <th class="text-end">Biaya</th>
+                                <th class="text-center">Bukti Bayar</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -63,10 +64,13 @@
                                         {{ $extension->monthly_blocks }} bulan + {{ $extension->daily_days }} hari harian
                                     </td>
                                     <td class="text-end">@rupiah($extension->cost)</td>
+                                    <td class="text-center">
+                                        <x-payment-proof :model="$extension" label="Bukti bayar perpanjangan" size="sm" />
+                                    </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="4" class="text-center text-muted py-3">Belum pernah diperpanjang.</td>
+                                    <td colspan="5" class="text-center text-muted py-3">Belum pernah diperpanjang.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -111,10 +115,8 @@
 
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white fw-semibold"><i class="bi bi-image me-1"></i> Bukti Pelunasan</div>
-                <div class="card-body text-center">
-                    <a href="{{ $rental->paymentProofUrl() }}" target="_blank" rel="noopener">
-                        <img src="{{ $rental->paymentProofUrl() }}" class="img-fluid img-thumbnail" style="max-height: 240px" alt="Bukti pelunasan">
-                    </a>
+                <div class="card-body">
+                    <x-payment-proof :model="$rental" label="Bukti pelunasan" />
                 </div>
             </div>
         </div>

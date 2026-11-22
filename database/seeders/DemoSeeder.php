@@ -4,49 +4,38 @@ namespace Database\Seeders;
 
 use App\Enums\GarageType;
 use App\Enums\RentalType;
+use App\Enums\VerificationAction;
 use App\Models\Garage;
 use App\Models\Rental;
 use App\Models\RentalExtension;
 use App\Models\User;
 use App\Models\Vehicle;
-use App\Services\GarageStatusService;
+use App\Services\GarageService;
 use App\Services\RentalPriceCalculator;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\Sequence;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 
-/**
- * Data demo: 25 garasi, 3 penyewa (2 approved, 1 pending), dan beberapa
- * rental tersebar di bulan-bulan tahun berjalan supaya laporan berisi.
- */
+// seeder untuk membuat data demo (garasi, penyewa, sewa)
 class DemoSeeder extends Seeder
 {
-    /**
-     * Path gambar bukti bayar contoh pada disk public.
-     */
+    // lokasi gambar bukti bayar demo
     private const DEMO_PROOF = 'payment-proofs/demo.png';
 
-    /**
-     * @param  RentalPriceCalculator  $calculator  Kalkulator harga sewa.
-     */
+    // function constructor untuk memanggil kalkulator harga
     public function __construct(private readonly RentalPriceCalculator $calculator) {}
 
-    /**
-     * Jalankan seeder.
-     *
-     * @param  GarageStatusService  $statusService  Service sinkronisasi status garasi.
-     */
-    public function run(GarageStatusService $statusService): void
+    // function untuk membuat semua data demo
+    public function run(GarageService $garageService): void
     {
         $this->storeDemoProof();
 
-        $garages = $this->seedGarages();
-        [$tenantA, $tenantB] = $this->seedTenants();
-
         $today = today();
         $admin = User::query()->where('email', 'admin@garasi.test')->firstOrFail();
+
+        $garages = $this->seedGarages();
+        [$tenantA, $tenantB] = $this->seedTenants($admin);
 
         // Rental aktif hari ini (satu per tipe garasi).
         $this->rent($tenantA, $garages[GarageType::Bicycle->value][0], 'motorcycle', $today->copy()->subDays(6), 10);
@@ -76,14 +65,10 @@ class DemoSeeder extends Seeder
             }
         }
 
-        $statusService->sync($today);
+        $garageService->syncStatus($today);
     }
 
-    /**
-     * Membuat 10 garasi S, 10 garasi C, dan 5 garasi E.
-     *
-     * @return array<string, Collection<int, Garage>>
-     */
+    // function untuk membuat data garasi demo
     private function seedGarages(): array
     {
         $make = fn (string $state, string $prefix, int $count) => Garage::factory()
@@ -100,18 +85,17 @@ class DemoSeeder extends Seeder
         ];
     }
 
-    /**
-     * Membuat 2 penyewa approved dan 1 penyewa pending.
-     *
-     * @return array{0: User, 1: User}
-     */
-    private function seedTenants(): array
+    // function untuk membuat data penyewa demo
+    private function seedTenants(User $admin): array
     {
+        $registeredAt = today()->startOfYear()->setTime(9, 0);
+
         $tenantA = User::factory()->approved()->create([
             'nik' => '3201010101900001',
             'name' => 'Budi Santoso',
             'phone' => '081234567801',
             'email' => 'budi@garasi.test',
+            'created_at' => $registeredAt,
         ]);
 
         $tenantB = User::factory()->approved()->create([
@@ -119,34 +103,35 @@ class DemoSeeder extends Seeder
             'name' => 'Siti Rahmawati',
             'phone' => '081234567802',
             'email' => 'siti@garasi.test',
+            'created_at' => $registeredAt,
         ]);
 
-        User::factory()->pending()->create([
+        $pending = User::factory()->pending()->create([
             'nik' => '3201010101900003',
             'name' => 'Andi Pratama',
             'phone' => '081234567803',
             'email' => 'andi@garasi.test',
-            'created_at' => today()->subDay(),
+            'created_at' => today()->subDay()->setTime(14, 0),
         ]);
+
+        foreach ([$tenantA, $tenantB] as $tenant) {
+            $tenant->verifications()->create(['action' => VerificationAction::Registered, 'created_at' => $registeredAt]);
+            $tenant->verifications()->create([
+                'action' => VerificationAction::Approved,
+                'admin_id' => $admin->id,
+                'created_at' => $registeredAt->copy()->addHours(2),
+            ]);
+        }
+        $pending->verifications()->create(['action' => VerificationAction::Registered, 'created_at' => $pending->created_at]);
 
         return [$tenantA, $tenantB];
     }
 
-    /**
-     * Membuat kendaraan dan rental demo dengan biaya yang konsisten.
-     *
-     * @param  User  $tenant  Penyewa.
-     * @param  Garage  $garage  Garasi yang disewa.
-     * @param  string  $vehicle  State factory kendaraan: bicycle|motorcycle|car|electric.
-     * @param  CarbonInterface  $start  Tanggal mulai.
-     * @param  int|null  $days  Jumlah hari (sewa harian) atau null untuk sewa bulanan.
-     * @param  float|null  $batteryRemaining  Sisa baterai kWh (khusus mobil listrik).
-     * @return Rental
-     */
+    // function untuk membuat data sewa demo
     private function rent(User $tenant, Garage $garage, string $vehicle, CarbonInterface $start, ?int $days, ?float $batteryRemaining = null): Rental
     {
-        $vehicleState = $vehicle === 'electric' ? 'electricCar' : $vehicle;
-        $vehicleModel = Vehicle::factory()->{$vehicleState}()->create(['user_id' => $tenant->id]);
+        $factoryState = $vehicle === 'electric' ? 'electricCar' : $vehicle;
+        $vehicleModel = Vehicle::factory()->{$factoryState}()->create(['user_id' => $tenant->id]);
 
         // Biaya dihitung oleh kalkulator yang sama dengan aplikasi (tanpa logika duplikat).
         $quote = $this->calculator->quote(
@@ -167,17 +152,13 @@ class DemoSeeder extends Seeder
             'payment_proof' => self::DEMO_PROOF,
             'created_at' => $start,
             'updated_at' => $start,
-            ...$quote->toRentalAttributes(),
+            ...$quote,
+            'start_date' => $quote['start_date']->toDateString(),
+            'end_date' => $quote['end_date']->toDateString(),
         ]);
     }
 
-    /**
-     * Membuat perpanjangan demo (dihitung oleh kalkulator) dan memperbarui tanggal selesai rental.
-     *
-     * @param  Rental  $rental  Rental yang diperpanjang.
-     * @param  User  $admin  Admin yang memproses.
-     * @param  int  $days  Tambahan hari.
-     */
+    // function untuk membuat data perpanjangan demo
     private function extend(Rental $rental, User $admin, int $days): void
     {
         $breakdown = $this->calculator->extensionCost($rental->end_date, $days, (float) $rental->daily_price);
@@ -186,23 +167,21 @@ class DemoSeeder extends Seeder
         RentalExtension::factory()->create([
             'rental_id' => $rental->id,
             'admin_id' => $admin->id,
-            'old_end_date' => $breakdown->oldEndDate->toDateString(),
-            'new_end_date' => $breakdown->newEndDate->toDateString(),
-            'additional_days' => $breakdown->additionalDays,
-            'monthly_blocks' => $breakdown->monthlyBlocks,
-            'daily_days' => $breakdown->dailyDays,
-            'cost' => $breakdown->cost,
+            'old_end_date' => $breakdown['old_end_date']->toDateString(),
+            'new_end_date' => $breakdown['new_end_date']->toDateString(),
+            'additional_days' => $breakdown['additional_days'],
+            'monthly_blocks' => $breakdown['monthly_blocks'],
+            'daily_days' => $breakdown['daily_days'],
+            'cost' => $breakdown['cost'],
             'payment_proof' => self::DEMO_PROOF,
             'created_at' => $createdAt,
             'updated_at' => $createdAt,
         ]);
 
-        $rental->update(['end_date' => $breakdown->newEndDate->toDateString()]);
+        $rental->update(['end_date' => $breakdown['new_end_date']->toDateString()]);
     }
 
-    /**
-     * Menyimpan gambar PNG kecil sebagai bukti bayar contoh.
-     */
+    // function untuk menyimpan gambar bukti bayar demo
     private function storeDemoProof(): void
     {
         $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=');

@@ -2,20 +2,14 @@
 
 namespace App\Enums;
 
-/**
- * Status verifikasi akun penyewa.
- */
+// enum untuk status verifikasi akun penyewa
 enum UserStatus: string
 {
     case Pending = 'pending';
     case Approved = 'approved';
     case Rejected = 'rejected';
 
-    /**
-     * Label berbahasa Indonesia untuk ditampilkan di UI.
-     *
-     * @return string
-     */
+    // function untuk menampilkan label dalam bahasa Indonesia
     public function label(): string
     {
         return match ($this) {
@@ -25,11 +19,7 @@ enum UserStatus: string
         };
     }
 
-    /**
-     * Warna badge Bootstrap yang sesuai dengan status.
-     *
-     * @return string
-     */
+    // function untuk menentukan warna badge di tampilan
     public function badgeClass(): string
     {
         return match ($this) {

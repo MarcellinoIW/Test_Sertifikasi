@@ -41,10 +41,23 @@ Route::middleware(['auth', 'role:admin'])
         Route::get('/garages/create', [Admin\GarageController::class, 'create'])->name('garages.create');
         Route::post('/garages', [Admin\GarageController::class, 'store'])->name('garages.store');
 
+        // Data sewa (termasuk bukti bayar)
+        Route::get('/rentals', [Admin\RentalController::class, 'index'])->name('rentals.index');
+        Route::get('/rentals/{rental}', [Admin\RentalController::class, 'show'])->name('rentals.show');
+
         // Verifikasi pendaftar
         Route::get('/tenants', [Admin\TenantVerificationController::class, 'index'])->name('tenants.index');
         Route::patch('/tenants/{tenant}/approve', [Admin\TenantVerificationController::class, 'approve'])->name('tenants.approve');
         Route::patch('/tenants/{tenant}/reject', [Admin\TenantVerificationController::class, 'reject'])->name('tenants.reject');
+
+        // Perpanjang sewa
+        Route::get('/extensions', [Admin\RentalExtensionController::class, 'index'])->name('extensions.index');
+        Route::get('/extensions/{rental}/create', [Admin\RentalExtensionController::class, 'create'])->name('extensions.create');
+        Route::get('/extensions/{rental}/preview', [Admin\RentalExtensionController::class, 'preview'])->name('extensions.preview');
+        Route::post('/extensions/{rental}', [Admin\RentalExtensionController::class, 'store'])->name('extensions.store');
+
+        // Laporan
+        Route::get('/reports', [Admin\ReportController::class, 'index'])->name('reports.index');
     });
 
 /*

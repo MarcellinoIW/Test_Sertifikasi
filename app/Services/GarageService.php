@@ -4,46 +4,28 @@ namespace App\Services;
 
 use App\Enums\GarageStatus;
 use App\Enums\GarageType;
-use App\Exceptions\BusinessRuleException;
 use App\Models\Garage;
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
-/**
- * Logika bisnis pengelolaan garasi oleh admin.
- */
+// service untuk logika garasi (kode garasi, daftar garasi, status garasi)
 class GarageService
 {
-    /**
-     * @param  GarageCodeGenerator  $codeGenerator  Pembuat kode garasi.
-     * @param  GarageStatusService  $statusService  Sinkronisasi status garasi.
-     */
-    public function __construct(
-        private readonly GarageCodeGenerator $codeGenerator,
-        private readonly GarageStatusService $statusService,
-    ) {}
+    // jumlah digit nomor kode garasi
+    private const DIGITS = 3;
 
-    /**
-     * Membuat sejumlah garasi sekaligus dalam satu transaksi.
-     * Harga per kWh hanya disimpan untuk garasi tipe electric.
-     *
-     * @param  GarageType  $type  Tipe garasi.
-     * @param  int  $qty  Jumlah garasi (1-999).
-     * @param  float  $dailyPrice  Harga sewa harian.
-     * @param  float|null  $electricityPricePerKwh  Harga isi listrik per kWh (wajib untuk electric).
-     * @return Collection<int, Garage> Garasi yang baru dibuat.
-     *
-     * @throws BusinessRuleException Jika kuota kode terlampaui atau harga kWh tidak diisi untuk tipe electric.
-     */
+    // function untuk membuat banyak garasi sekaligus
     public function createBatch(GarageType $type, int $qty, float $dailyPrice, ?float $electricityPricePerKwh = null): Collection
     {
         if ($type->hasCharging() && $electricityPricePerKwh === null) {
-            throw new BusinessRuleException('Harga isi listrik per kWh wajib diisi untuk garasi mobil listrik.', 'electricity_price_per_kwh');
+            throw ValidationException::withMessages(['electricity_price_per_kwh' => 'Harga isi listrik per kWh wajib diisi untuk garasi mobil listrik.']);
         }
 
         return DB::transaction(function () use ($type, $qty, $dailyPrice, $electricityPricePerKwh) {
-            $codes = $this->codeGenerator->nextCodes($type, $qty, lock: true);
+            $codes = $this->nextCodes($type, $qty, lock: true);
             $now = now();
 
             $rows = array_map(fn (string $code) => [
@@ -62,19 +44,11 @@ class GarageService
         });
     }
 
-    /**
-     * Daftar garasi terpaginasi dengan filter tipe/status. Status disinkronkan
-     * lebih dulu dan rental aktif hari ini ikut dimuat untuk ditampilkan.
-     *
-     * @param  GarageType|null  $type  Filter tipe garasi.
-     * @param  GarageStatus|null  $status  Filter status garasi.
-     * @param  int  $perPage  Jumlah baris per halaman.
-     * @return LengthAwarePaginator<int, Garage>
-     */
+    // function untuk mengambil daftar garasi dengan filter
     public function paginate(?GarageType $type = null, ?GarageStatus $status = null, int $perPage = 20): LengthAwarePaginator
     {
         $today = today();
-        $this->statusService->sync($today);
+        $this->syncStatus($today);
 
         return Garage::query()
             ->when($type, fn ($query) => $query->ofType($type))
@@ -84,5 +58,85 @@ class GarageService
             ->orderBy('code')
             ->paginate($perPage)
             ->withQueryString();
+    }
+
+    // function untuk menyesuaikan status garasi (tersedia / terpakai)
+    public function syncStatus(?CarbonInterface $date = null): array
+    {
+        $date ??= today();
+
+        $freed = Garage::query()
+            ->where('status', GarageStatus::Used)
+            ->availableOn($date)
+            ->update(['status' => GarageStatus::Available]);
+
+        $occupied = Garage::query()
+            ->where('status', GarageStatus::Available)
+            ->occupiedOn($date)
+            ->update(['status' => GarageStatus::Used]);
+
+        return ['available' => $freed, 'used' => $occupied];
+    }
+
+    // function untuk membuat kode garasi berikutnya
+    public function nextCodes(GarageType $type, int $qty, bool $lock = false): array
+    {
+        $last = $this->lastNumber($type, $lock);
+        $max = $this->maxNumber();
+
+        if ($qty < 1 || $last + $qty > $max) {
+            throw ValidationException::withMessages([
+                'quantity' => "Jumlah melebihi batas. Garasi {$type->label()} terakhir bernomor {$this->format($type, $last)}, "
+                    ."sisa kuota hanya {$this->remaining($type)} garasi (maksimal {$this->format($type, $max)}).",
+            ]);
+        }
+
+        return array_map(
+            fn (int $number) => $this->format($type, $number),
+            range($last + 1, $last + $qty),
+        );
+    }
+
+    // function untuk mengambil nomor garasi terakhir
+    public function lastNumber(GarageType $type, bool $lock = false): int
+    {
+        $query = Garage::query()->where('code', 'like', $type->prefix().'%');
+
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        $lastCode = $query->max('code');
+
+        return $lastCode ? (int) substr((string) $lastCode, strlen($type->prefix())) : 0;
+    }
+
+    // function untuk menghitung sisa nomor garasi yang masih bisa dibuat
+    public function remaining(GarageType $type): int
+    {
+        return max(0, $this->maxNumber() - $this->lastNumber($type));
+    }
+
+    // function untuk mengambil nomor terakhir dari semua tipe garasi
+    public function lastNumbers(): array
+    {
+        $result = [];
+        foreach (GarageType::cases() as $type) {
+            $result[$type->value] = $this->lastNumber($type);
+        }
+
+        return $result;
+    }
+
+    // function untuk mengubah nomor menjadi kode garasi (contoh C010)
+    public function format(GarageType $type, int $number): string
+    {
+        return $type->prefix().str_pad((string) $number, self::DIGITS, '0', STR_PAD_LEFT);
+    }
+
+    // function untuk mengambil batas maksimal nomor garasi
+    private function maxNumber(): int
+    {
+        return (int) config('garasi.max_garages_per_batch');
     }
 }

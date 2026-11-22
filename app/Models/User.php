@@ -4,36 +4,18 @@ namespace App\Models;
 
 use App\Enums\UserRole;
 use App\Enums\UserStatus;
-use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Support\Carbon;
 
-/**
- * Pengguna aplikasi: admin (dibuat via seeder) atau penyewa (registrasi mandiri).
- *
- * @property int $id
- * @property string|null $nik
- * @property string $name
- * @property string|null $phone
- * @property string $email
- * @property UserRole $role
- * @property UserStatus $status
- * @property Carbon $created_at
- */
+// model untuk data user (admin dan penyewa)
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
-    /**
-     * Atribut yang boleh diisi secara massal.
-     *
-     * @var list<string>
-     */
+    // kolom yang boleh diisi
     protected $fillable = [
         'nik',
         'name',
@@ -44,21 +26,13 @@ class User extends Authenticatable
         'status',
     ];
 
-    /**
-     * Atribut yang disembunyikan saat serialisasi.
-     *
-     * @var list<string>
-     */
+    // kolom yang disembunyikan
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Konversi tipe atribut.
-     *
-     * @return array<string, string>
-     */
+    // function untuk mengatur tipe data kolom
     protected function casts(): array
     {
         return [
@@ -69,95 +43,61 @@ class User extends Authenticatable
         ];
     }
 
-    /**
-     * Kendaraan yang pernah didaftarkan penyewa.
-     *
-     * @return HasMany<Vehicle, $this>
-     */
+    // function relasi user ke kendaraan
     public function vehicles(): HasMany
     {
         return $this->hasMany(Vehicle::class);
     }
 
-    /**
-     * Seluruh sewa milik penyewa.
-     *
-     * @return HasMany<Rental, $this>
-     */
+    // function relasi user ke data sewa
     public function rentals(): HasMany
     {
         return $this->hasMany(Rental::class);
     }
 
-    /**
-     * Perpanjangan sewa yang diproses oleh admin ini.
-     *
-     * @return HasMany<RentalExtension, $this>
-     */
+    // function relasi user ke riwayat verifikasi
+    public function verifications(): HasMany
+    {
+        return $this->hasMany(TenantVerification::class)->orderBy('created_at')->orderBy('id');
+    }
+
+    // function relasi admin ke perpanjangan yang diproses
     public function processedExtensions(): HasMany
     {
         return $this->hasMany(RentalExtension::class, 'admin_id');
     }
 
-    /**
-     * Apakah pengguna ini admin.
-     *
-     * @return bool
-     */
+    // function untuk mengecek user adalah admin
     public function isAdmin(): bool
     {
         return $this->role === UserRole::Admin;
     }
 
-    /**
-     * Apakah pengguna ini penyewa.
-     *
-     * @return bool
-     */
+    // function untuk mengecek user adalah penyewa
     public function isTenant(): bool
     {
         return $this->role === UserRole::Tenant;
     }
 
-    /**
-     * Apakah akun sudah disetujui sehingga boleh login.
-     * Admin selalu dianggap disetujui.
-     *
-     * @return bool
-     */
+    // function untuk mengecek akun sudah disetujui
     public function isApproved(): bool
     {
         return $this->isAdmin() || $this->status === UserStatus::Approved;
     }
 
-    /**
-     * Nama route halaman awal (dashboard) sesuai role pengguna.
-     *
-     * @return string
-     */
+    // function untuk menentukan halaman dashboard sesuai role
     public function homeRoute(): string
     {
         return $this->isAdmin() ? 'admin.dashboard' : 'tenant.dashboard';
     }
 
-    /**
-     * Scope: hanya pengguna dengan role penyewa.
-     *
-     * @param  Builder<User>  $query
-     * @return Builder<User>
-     */
+    // function untuk filter user yang role-nya penyewa
     public function scopeTenants(Builder $query): Builder
     {
         return $query->where('role', UserRole::Tenant);
     }
 
-    /**
-     * Scope: filter berdasarkan status verifikasi.
-     *
-     * @param  Builder<User>  $query
-     * @param  UserStatus  $status  Status yang dicari.
-     * @return Builder<User>
-     */
+    // function untuk filter user berdasarkan status verifikasi
     public function scopeWithStatus(Builder $query, UserStatus $status): Builder
     {
         return $query->where('status', $status);

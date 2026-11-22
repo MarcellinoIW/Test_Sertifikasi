@@ -3,32 +3,20 @@
 namespace App\Models;
 
 use App\Enums\VehicleType;
-use Database\Factories\VehicleFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/**
- * Kendaraan milik penyewa yang dititipkan di garasi.
- *
- * @property int $id
- * @property int $user_id
- * @property VehicleType $type
- * @property string|null $plate_number
- * @property string $brand_model
- * @property string|null $battery_capacity_kwh
- */
+// model untuk data kendaraan penyewa
 class Vehicle extends Model
 {
-    /** @use HasFactory<VehicleFactory> */
     use HasFactory;
 
-    /**
-     * Atribut yang boleh diisi secara massal.
-     *
-     * @var list<string>
-     */
+    // pola nomor plat Indonesia (contoh B 1234 CD)
+    public const PLATE_PATTERN = '/^[A-Za-z]{1,2}\s*\d{1,4}(\s*[A-Za-z]{1,3})?$/';
+
+    // kolom yang boleh diisi
     protected $fillable = [
         'user_id',
         'type',
@@ -37,11 +25,7 @@ class Vehicle extends Model
         'battery_capacity_kwh',
     ];
 
-    /**
-     * Konversi tipe atribut.
-     *
-     * @return array<string, string>
-     */
+    // function untuk mengatur tipe data kolom
     protected function casts(): array
     {
         return [
@@ -50,31 +34,19 @@ class Vehicle extends Model
         ];
     }
 
-    /**
-     * Pemilik kendaraan.
-     *
-     * @return BelongsTo<User, $this>
-     */
+    // function relasi kendaraan ke pemiliknya
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Sewa yang menggunakan kendaraan ini.
-     *
-     * @return HasMany<Rental, $this>
-     */
+    // function relasi kendaraan ke data sewa
     public function rentals(): HasMany
     {
         return $this->hasMany(Rental::class);
     }
 
-    /**
-     * Teks ringkas kendaraan untuk tampilan, misal "Mobil - Toyota Avanza (B 1234 CD)".
-     *
-     * @return string
-     */
+    // function untuk menampilkan nama kendaraan secara singkat
     public function displayName(): string
     {
         $plate = $this->plate_number ? " ({$this->plate_number})" : '';

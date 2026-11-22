@@ -8,9 +8,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Membuat tabel users (admin & penyewa).
-     */
+    // function untuk membuat tabel users
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
@@ -30,9 +28,7 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Menghapus tabel users.
-     */
+    // function untuk menghapus tabel users
     public function down(): void
     {
         Schema::dropIfExists('users');

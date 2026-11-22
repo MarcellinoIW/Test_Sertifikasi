@@ -3,9 +3,13 @@
 use App\Enums\GarageType;
 use App\Enums\RentalType;
 use App\Enums\VehicleType;
-use App\Exceptions\BusinessRuleException;
 use App\Services\RentalPriceCalculator;
 use Carbon\Carbon;
+use Illuminate\Validation\ValidationException;
+use Tests\TestCase;
+
+// TestCase dibutuhkan karena ValidationException memakai validator Laravel.
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->calc = new RentalPriceCalculator(monthlyMultiplier: 25, batteryCapacityKwh: 100);
@@ -52,22 +56,22 @@ describe('Biaya sewa', function () {
     it('quote harian: mulai 21 Nov selama 1 hari selesai 22 Nov', function () {
         $quote = $this->calc->quote(RentalType::Daily, 1, Carbon::create(2026, 11, 21), 20000, VehicleType::Car, GarageType::Car);
 
-        expect($quote->endDate->toDateString())->toBe('2026-11-22')
-            ->and($quote->rentCost)->toBe(20000.0)
-            ->and($quote->totalCost)->toBe(20000.0);
+        expect($quote['end_date']->toDateString())->toBe('2026-11-22')
+            ->and($quote['rent_cost'])->toBe(20000.0)
+            ->and($quote['total_cost'])->toBe(20000.0);
     });
 
     it('quote bulanan Februari 2028 berisi 29 hari dengan biaya 25 x harian', function () {
         $quote = $this->calc->quote(RentalType::Monthly, null, Carbon::create(2028, 2, 1), 20000, VehicleType::Car, GarageType::Car);
 
-        expect($quote->days)->toBe(29)
-            ->and($quote->endDate->toDateString())->toBe('2028-03-01')
-            ->and($quote->rentCost)->toBe(500000.0);
+        expect($quote['days'])->toBe(29)
+            ->and($quote['end_date']->toDateString())->toBe('2028-03-01')
+            ->and($quote['rent_cost'])->toBe(500000.0);
     });
 
     it('quote harian menolak jumlah hari melebihi batas bulan berjalan', function () {
         $this->calc->quote(RentalType::Daily, 30, Carbon::create(2026, 11, 21), 20000, VehicleType::Car, GarageType::Car);
-    })->throws(BusinessRuleException::class, 'antara 1 sampai 29 hari');
+    })->throws(ValidationException::class, 'antara 1 sampai 29 hari');
 });
 
 describe('Biaya isi listrik', function () {
@@ -87,19 +91,19 @@ describe('Biaya isi listrik', function () {
     it('total quote mobil listrik di garasi E = biaya sewa + biaya listrik', function () {
         $quote = $this->calc->quote(RentalType::Daily, 2, Carbon::create(2026, 11, 21), 30000, VehicleType::ElectricCar, GarageType::Electric, 30, 2500);
 
-        expect($quote->rentCost)->toBe(60000.0)
-            ->and($quote->chargedKwh)->toBe(70.0)
-            ->and($quote->electricityCost)->toBe(175000.0)
-            ->and($quote->totalCost)->toBe(235000.0);
+        expect($quote['rent_cost'])->toBe(60000.0)
+            ->and($quote['charged_kwh'])->toBe(70.0)
+            ->and($quote['electricity_cost'])->toBe(175000.0)
+            ->and($quote['total_cost'])->toBe(235000.0);
     });
 
     it('quote mobil listrik di garasi C tidak menyimpan kWh maupun harga per kWh', function () {
         $quote = $this->calc->quote(RentalType::Daily, 2, Carbon::create(2026, 11, 21), 20000, VehicleType::ElectricCar, GarageType::Car, 30, null);
 
-        expect($quote->electricityCost)->toBe(0.0)
-            ->and($quote->chargedKwh)->toBeNull()
-            ->and($quote->electricityPricePerKwh)->toBeNull()
-            ->and($quote->batteryRemainingKwh)->toBe(30.0);
+        expect($quote['electricity_cost'])->toBe(0.0)
+            ->and($quote['charged_kwh'])->toBeNull()
+            ->and($quote['electricity_price_per_kwh'])->toBeNull()
+            ->and($quote['battery_remaining_kwh'])->toBe(30.0);
     });
 });
 
@@ -107,45 +111,45 @@ describe('Biaya perpanjangan (extensionCost)', function () {
     it('selesai 25 Des + 45 hari = 1 blok bulan + 14 hari harian', function () {
         $b = $this->calc->extensionCost(Carbon::create(2026, 12, 25), 45, 20000);
 
-        expect($b->monthlyBlocks)->toBe(1)
-            ->and($b->dailyDays)->toBe(14)
-            ->and($b->cost)->toBe(25 * 20000 + 14 * 20000.0)
-            ->and($b->newEndDate->toDateString())->toBe('2027-02-08');
+        expect($b['monthly_blocks'])->toBe(1)
+            ->and($b['daily_days'])->toBe(14)
+            ->and($b['cost'])->toBe(25 * 20000 + 14 * 20000.0)
+            ->and($b['new_end_date']->toDateString())->toBe('2027-02-08');
     });
 
     it('selesai 10 Nov + 20 hari = 0 blok bulan + 20 hari harian', function () {
         $b = $this->calc->extensionCost(Carbon::create(2026, 11, 10), 20, 20000);
 
-        expect($b->monthlyBlocks)->toBe(0)
-            ->and($b->dailyDays)->toBe(20)
-            ->and($b->cost)->toBe(400000.0);
+        expect($b['monthly_blocks'])->toBe(0)
+            ->and($b['daily_days'])->toBe(20)
+            ->and($b['cost'])->toBe(400000.0);
     });
 
     it('lintas Februari kabisat: 10 Feb 2028 + 29 hari = tepat 1 blok bulan', function () {
         $b = $this->calc->extensionCost(Carbon::create(2028, 2, 10), 29, 20000);
 
-        expect($b->monthlyBlocks)->toBe(1)
-            ->and($b->dailyDays)->toBe(0)
-            ->and($b->cost)->toBe(500000.0);
+        expect($b['monthly_blocks'])->toBe(1)
+            ->and($b['daily_days'])->toBe(0)
+            ->and($b['cost'])->toBe(500000.0);
     });
 
     it('lintas Februari kabisat: 10 Feb 2028 + 28 hari masih dihitung harian', function () {
         $b = $this->calc->extensionCost(Carbon::create(2028, 2, 10), 28, 20000);
 
-        expect($b->monthlyBlocks)->toBe(0)
-            ->and($b->dailyDays)->toBe(28);
+        expect($b['monthly_blocks'])->toBe(0)
+            ->and($b['daily_days'])->toBe(28);
     });
 
     it('lebih dari 2 bulan: 15 Jan 2026 + 70 hari = 2 blok bulan (Jan 31, Feb 28) + 11 hari', function () {
         $b = $this->calc->extensionCost(Carbon::create(2026, 1, 15), 70, 10000);
 
-        expect($b->monthlyBlocks)->toBe(2)
-            ->and($b->dailyDays)->toBe(11)
-            ->and($b->cost)->toBe(2 * 250000 + 11 * 10000.0)
-            ->and($b->newEndDate->toDateString())->toBe('2026-03-26');
+        expect($b['monthly_blocks'])->toBe(2)
+            ->and($b['daily_days'])->toBe(11)
+            ->and($b['cost'])->toBe(2 * 250000 + 11 * 10000.0)
+            ->and($b['new_end_date']->toDateString())->toBe('2026-03-26');
     });
 
     it('menolak tambahan hari kurang dari 1', function () {
         $this->calc->extensionCost(Carbon::create(2026, 11, 10), 0, 20000);
-    })->throws(BusinessRuleException::class);
+    })->throws(ValidationException::class);
 });

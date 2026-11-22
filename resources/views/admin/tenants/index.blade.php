@@ -33,12 +33,14 @@
                         <th>Telepon</th>
                         <th>Email</th>
                         <th>Tanggal Daftar</th>
+                        <th>Riwayat</th>
                         @if ($status === \App\Enums\UserStatus::Pending)
                             <th class="text-end">Aksi</th>
                         @endif
                     </tr>
                 </thead>
                 <tbody>
+                    @php $columns = $status === \App\Enums\UserStatus::Pending ? 7 : 6; @endphp
                     @forelse ($tenants as $tenant)
                         <tr>
                             <td class="font-monospace">{{ $tenant->nik }}</td>
@@ -46,6 +48,18 @@
                             <td>{{ $tenant->phone }}</td>
                             <td>{{ $tenant->email }}</td>
                             <td>@tanggal($tenant->created_at)</td>
+                            <td>
+                                @if ($tenant->rejection_count > 0)
+                                    <span class="badge text-bg-danger d-inline-block mb-1">
+                                        Pernah ditolak {{ $tenant->rejection_count }}×
+                                    </span>
+                                    <div class="small text-muted">terakhir @tanggal($tenant->last_rejected_at)</div>
+                                @endif
+                                <button type="button" class="btn btn-link btn-sm p-0" data-bs-toggle="collapse"
+                                        data-bs-target="#history-{{ $tenant->id }}" aria-expanded="false">
+                                    <i class="bi bi-clock-history me-1"></i>Lihat riwayat ({{ $tenant->verifications->count() }})
+                                </button>
+                            </td>
                             @if ($status === \App\Enums\UserStatus::Pending)
                                 <td class="text-end text-nowrap">
                                     <form method="POST" action="{{ route('admin.tenants.approve', $tenant) }}" class="d-inline">
@@ -56,7 +70,7 @@
                                         </button>
                                     </form>
                                     <form method="POST" action="{{ route('admin.tenants.reject', $tenant) }}" class="d-inline"
-                                          onsubmit="return confirm('Tolak pendaftaran {{ e($tenant->name) }}?');">
+                                          onsubmit="return confirm({{ \Illuminate\Support\Js::from('Tolak pendaftaran '.$tenant->name.'?') }});">
                                         @csrf
                                         @method('PATCH')
                                         <button type="submit" class="btn btn-sm btn-outline-danger">
@@ -66,9 +80,24 @@
                                 </td>
                             @endif
                         </tr>
+                        {{-- Riwayat pendaftaran & verifikasi (lipat/buka) --}}
+                        <tr class="collapse table-light" id="history-{{ $tenant->id }}">
+                            <td colspan="{{ $columns }}" class="small">
+                                <div class="fw-semibold mb-1"><i class="bi bi-clock-history me-1"></i>Riwayat {{ $tenant->name }}</div>
+                                @forelse ($tenant->verifications as $log)
+                                    <div class="d-flex flex-wrap gap-2 align-items-center py-1 border-bottom">
+                                        <span class="text-muted" style="min-width: 9rem">{{ $log->created_at->translatedFormat('d M Y H:i') }}</span>
+                                        <span class="badge text-bg-{{ $log->action->badgeClass() }}">{{ $log->action->label() }}</span>
+                                        <span class="text-muted">{{ $log->admin ? 'oleh '.$log->admin->name : 'oleh pendaftar' }}</span>
+                                    </div>
+                                @empty
+                                    <div class="text-muted">Belum ada riwayat tercatat.</div>
+                                @endforelse
+                            </td>
+                        </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-4">
+                            <td colspan="{{ $columns }}" class="text-center text-muted py-4">
                                 Tidak ada penyewa dengan status {{ strtolower($status->label()) }}.
                             </td>
                         </tr>

@@ -1,16 +1,16 @@
 <?php
 
 use App\Enums\GarageType;
-use App\Exceptions\BusinessRuleException;
 use App\Models\Garage;
-use App\Services\GarageCodeGenerator;
+use App\Services\GarageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->generator = new GarageCodeGenerator;
+    $this->generator = new GarageService;
 });
 
 it('menghasilkan kode pertama S001 jika belum ada garasi sepeda', function () {
@@ -46,8 +46,21 @@ it('menolak batch jika nomor terakhir ditambah jumlah melebihi 999', function ()
     Garage::factory()->bicycle()->create(['code' => 'S998']);
 
     $this->generator->nextCodes(GarageType::Bicycle, 2);
-})->throws(BusinessRuleException::class, 'sisa kuota hanya 1 garasi');
+})->throws(ValidationException::class, 'sisa kuota hanya 1 garasi');
 
 it('menolak batch 1000 garasi sekaligus', function () {
     $this->generator->nextCodes(GarageType::Car, 1000);
-})->throws(BusinessRuleException::class);
+})->throws(ValidationException::class);
+
+it('format nomor menjadi kode garasi 3 digit: (Car, 10) -> C010', function () {
+    expect($this->generator->format(GarageType::Car, 10))->toBe('C010')
+        ->and($this->generator->format(GarageType::Bicycle, 1))->toBe('S001')
+        ->and($this->generator->format(GarageType::Electric, 999))->toBe('E999');
+});
+
+it('menghitung sisa kuota nomor garasi: setelah S990 sisa 9', function () {
+    Garage::factory()->bicycle()->create(['code' => 'S990']);
+
+    expect($this->generator->remaining(GarageType::Bicycle))->toBe(9)
+        ->and($this->generator->remaining(GarageType::Car))->toBe(999);
+});

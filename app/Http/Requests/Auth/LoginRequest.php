@@ -8,31 +8,19 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-/**
- * Validasi form login beserta pembatasan percobaan (rate limit).
- */
+// request untuk validasi form login
 class LoginRequest extends FormRequest
 {
-    /**
-     * Maksimal percobaan login gagal sebelum dikunci sementara.
-     */
+    // maksimal percobaan login gagal
     private const MAX_ATTEMPTS = 5;
 
-    /**
-     * Semua tamu boleh mengirim form login.
-     *
-     * @return bool
-     */
+    // function untuk mengecek user boleh pakai request ini
     public function authorize(): bool
     {
         return true;
     }
 
-    /**
-     * Aturan validasi.
-     *
-     * @return array<string, array<int, string>>
-     */
+    // function untuk aturan validasi form login
     public function rules(): array
     {
         return [
@@ -41,11 +29,7 @@ class LoginRequest extends FormRequest
         ];
     }
 
-    /**
-     * Pesan error berbahasa Indonesia.
-     *
-     * @return array<string, string>
-     */
+    // function untuk pesan error validasi
     public function messages(): array
     {
         return [
@@ -55,11 +39,7 @@ class LoginRequest extends FormRequest
         ];
     }
 
-    /**
-     * Pastikan IP + email ini belum melewati batas percobaan login.
-     *
-     * @throws ValidationException Jika terlalu banyak percobaan.
-     */
+    // function untuk mengecek apakah login sudah terlalu sering gagal
     public function ensureIsNotRateLimited(): void
     {
         if (! RateLimiter::tooManyAttempts($this->throttleKey(), self::MAX_ATTEMPTS)) {
@@ -75,27 +55,19 @@ class LoginRequest extends FormRequest
         ]);
     }
 
-    /**
-     * Catat satu percobaan login yang gagal.
-     */
+    // function untuk menambah hitungan login gagal
     public function hitRateLimiter(): void
     {
         RateLimiter::hit($this->throttleKey());
     }
 
-    /**
-     * Reset penghitung percobaan setelah login berhasil.
-     */
+    // function untuk mereset hitungan login gagal
     public function clearRateLimiter(): void
     {
         RateLimiter::clear($this->throttleKey());
     }
 
-    /**
-     * Kunci rate limit berdasarkan email dan IP.
-     *
-     * @return string
-     */
+    // function untuk membuat key pembatas login (email + IP)
     private function throttleKey(): string
     {
         return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());

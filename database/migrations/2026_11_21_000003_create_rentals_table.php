@@ -7,10 +7,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Membuat tabel rentals. Harga harian dan harga per kWh disimpan
-     * sebagai snapshot agar laporan tidak berubah saat harga garasi diubah.
-     */
+    // function untuk membuat tabel rentals
     public function up(): void
     {
         Schema::create('rentals', function (Blueprint $table) {
@@ -37,9 +34,7 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Menghapus tabel rentals.
-     */
+    // function untuk menghapus tabel rentals
     public function down(): void
     {
         Schema::dropIfExists('rentals');

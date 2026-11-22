@@ -66,7 +66,7 @@
 
 @push('scripts')
     <script>
-        // Pratinjau saja; kode sebenarnya dibuat di server (GarageCodeGenerator).
+        // Pratinjau saja; kode sebenarnya dibuat di server (GarageService::nextCodes).
         (() => {
             const lastNumbers = @json($lastNumbers);
             const prefixes = @json($prefixes);

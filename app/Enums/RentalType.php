@@ -2,19 +2,13 @@
 
 namespace App\Enums;
 
-/**
- * Jenis sewa garasi.
- */
+// enum untuk jenis sewa (harian / bulanan)
 enum RentalType: string
 {
     case Daily = 'daily';
     case Monthly = 'monthly';
 
-    /**
-     * Label berbahasa Indonesia untuk ditampilkan di UI.
-     *
-     * @return string
-     */
+    // function untuk menampilkan label dalam bahasa Indonesia
     public function label(): string
     {
         return match ($this) {
@@ -23,11 +17,7 @@ enum RentalType: string
         };
     }
 
-    /**
-     * Daftar nilai enum, berguna untuk aturan validasi `in:`.
-     *
-     * @return array<int, string>
-     */
+    // function untuk mengambil semua nilai enum
     public static function values(): array
     {
         return array_column(self::cases(), 'value');

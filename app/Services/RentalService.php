@@ -6,52 +6,54 @@ use App\Enums\GarageStatus;
 use App\Enums\GarageType;
 use App\Enums\RentalType;
 use App\Enums\VehicleType;
-use App\Exceptions\BusinessRuleException;
 use App\Models\Garage;
 use App\Models\Rental;
 use App\Models\User;
-use App\Models\Vehicle;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
-/**
- * Logika bisnis sewa garasi baru oleh penyewa.
- */
+// service untuk logika sewa garasi oleh penyewa
 class RentalService
 {
-    /**
-     * Folder penyimpanan bukti pelunasan pada disk public.
-     */
+    // folder penyimpanan bukti bayar sewa
     public const PROOF_DIRECTORY = 'payment-proofs';
 
-    /**
-     * @param  RentalPriceCalculator  $calculator  Kalkulator harga (sumber kebenaran biaya).
-     * @param  GarageStatusService  $statusService  Sinkronisasi status garasi.
-     */
+    // function constructor untuk memanggil kalkulator harga dan GarageService
     public function __construct(
         private readonly RentalPriceCalculator $calculator,
-        private readonly GarageStatusService $statusService,
+        private readonly GarageService $garageService,
     ) {}
 
-    /**
-     * Data pendukung form sewa baru (untuk tampilan & pratinjau JS).
-     * Status garasi disinkronkan lebih dulu.
-     *
-     * @param  CarbonInterface|null  $today  Tanggal acuan; default hari ini.
-     * @return array<string, mixed>
-     */
+    // function untuk mengambil tanggal mulai sewa paling awal
+    public function earliestStartDate(?CarbonInterface $today = null): CarbonImmutable
+    {
+        return CarbonImmutable::instance($today ?? today())->startOfDay();
+    }
+
+    // function untuk mengambil tanggal mulai sewa paling akhir
+    public function latestStartDate(?CarbonInterface $today = null): CarbonImmutable
+    {
+        return $this->earliestStartDate($today)->addDays((int) config('garasi.max_start_days_ahead'));
+    }
+
+    // function untuk menyiapkan data yang dipakai di form sewa
     public function formData(?CarbonInterface $today = null): array
     {
-        $today ??= today();
-        $this->statusService->sync($today);
+        $today = $this->earliestStartDate($today);
+        $this->garageService->syncStatus($today);
 
         return [
-            'today' => $today->copy(),
+            'today' => $today,
+            'minStartDate' => $today,
+            'maxStartDate' => $this->latestStartDate($today),
             'vehicleTypes' => VehicleType::cases(),
             'garageTypes' => GarageType::cases(),
             'rentalTypes' => RentalType::cases(),
@@ -69,81 +71,58 @@ class RentalService
         ];
     }
 
-    /**
-     * Garasi bertipe tertentu yang tersedia pada tanggal acuan dan
-     * kompatibel dengan tipe kendaraan.
-     *
-     * @param  VehicleType  $vehicleType  Tipe kendaraan.
-     * @param  GarageType  $garageType  Tipe garasi yang dipilih.
-     * @param  CarbonInterface|null  $date  Tanggal acuan; default hari ini.
-     * @return Collection<int, Garage>
-     */
-    public function availableGarages(VehicleType $vehicleType, GarageType $garageType, ?CarbonInterface $date = null): Collection
+    // function untuk mencari garasi yang masih kosong
+    public function availableGarages(VehicleType $vehicleType, GarageType $garageType, CarbonInterface $startDate, int $days): Collection
     {
-        if (! $vehicleType->canUseGarage($garageType)) {
+        if (! $vehicleType->canUseGarage($garageType) || $days < 1) {
             return new Collection;
         }
 
-        $date ??= today();
-        $this->statusService->sync($date);
+        $this->garageService->syncStatus();
+
+        $start = CarbonImmutable::instance($startDate)->startOfDay();
 
         return Garage::query()
             ->ofType($garageType)
-            ->availableOn($date)
+            ->availableBetween($start, $start->addDays($days))
             ->orderBy('code')
             ->get();
     }
 
-    /**
-     * Membuat sewa baru: simpan bukti bayar, lalu dalam satu transaksi buat
-     * kendaraan + rental dan ubah status garasi menjadi used.
-     *
-     * Garasi dikunci (SELECT ... FOR UPDATE) lalu dicek ulang ketersediaannya
-     * untuk mencegah dua penyewa mengambil garasi yang sama bersamaan.
-     *
-     * @param  User  $tenant  Penyewa.
-     * @param  array{vehicle_type: string, plate_number?: string|null, brand_model: string, battery_remaining_kwh?: float|string|null, rental_type: string, days?: int|string|null, garage_id: int|string}  $data  Data form tervalidasi.
-     * @param  UploadedFile  $paymentProof  Gambar bukti pelunasan.
-     * @param  CarbonInterface|null  $today  Tanggal mulai; default hari ini.
-     * @return Rental
-     *
-     * @throws BusinessRuleException Jika garasi tidak kompatibel/terpakai, plat sedang dipakai, atau hari di luar batas.
-     */
+    // function untuk menyimpan sewa baru
     public function create(User $tenant, array $data, UploadedFile $paymentProof, ?CarbonInterface $today = null): Rental
     {
-        $today ??= today();
-        $vehicleType = VehicleType::from($data['vehicle_type']);
+        $today = $this->earliestStartDate($today);
+        $startDate = CarbonImmutable::parse($data['start_date'])->startOfDay();
         $rentalType = RentalType::from($data['rental_type']);
+
+        $vehicleType = VehicleType::from($data['vehicle_type']);
         $plate = $vehicleType->requiresPlate() ? $this->normalizePlate($data['plate_number'] ?? null) : null;
         $batteryRemaining = $vehicleType->isElectric() && isset($data['battery_remaining_kwh'])
             ? (float) $data['battery_remaining_kwh']
             : null;
 
+        $this->ensureStartDateAllowed($startDate, $today);
+
         if ($vehicleType->requiresPlate() && $plate === null) {
-            throw new BusinessRuleException('Nomor plat wajib diisi untuk kendaraan selain sepeda.', 'plate_number');
+            throw ValidationException::withMessages(['plate_number' => 'Nomor plat wajib diisi untuk kendaraan selain sepeda.']);
         }
 
         if ($vehicleType->isElectric() && $batteryRemaining === null) {
-            throw new BusinessRuleException('Sisa baterai wajib diisi untuk mobil listrik.', 'battery_remaining_kwh');
+            throw ValidationException::withMessages(['battery_remaining_kwh' => 'Sisa baterai wajib diisi untuk mobil listrik.']);
         }
 
         $proofPath = $paymentProof->store(self::PROOF_DIRECTORY, 'public');
 
         try {
-            return DB::transaction(function () use ($tenant, $data, $today, $vehicleType, $rentalType, $plate, $batteryRemaining, $proofPath) {
-                /** @var Garage $garage */
+            return DB::transaction(function () use ($tenant, $data, $today, $startDate, $vehicleType, $rentalType, $plate, $batteryRemaining, $proofPath) {
                 $garage = Garage::query()->lockForUpdate()->findOrFail($data['garage_id']);
 
-                $this->ensureGarageCanBeRented($garage, $vehicleType, $today);
-
-                if ($plate !== null) {
-                    $this->ensurePlateNotInActiveRental($plate, $today);
-                }
-
+                // Untuk bulanan, jumlah hari diabaikan dari client dan dihitung dari bulan tanggal mulai.
                 $quote = $this->calculator->quote(
                     type: $rentalType,
-                    days: isset($data['days']) ? (int) $data['days'] : null,
-                    startDate: $today,
+                    days: $rentalType === RentalType::Daily && isset($data['days']) ? (int) $data['days'] : null,
+                    startDate: $startDate,
                     dailyPrice: (float) $garage->daily_price,
                     vehicleType: $vehicleType,
                     garageType: $garage->type,
@@ -151,8 +130,13 @@ class RentalService
                     pricePerKwh: $garage->electricity_price_per_kwh !== null ? (float) $garage->electricity_price_per_kwh : null,
                 );
 
-                $vehicle = Vehicle::query()->create([
-                    'user_id' => $tenant->id,
+                $this->ensureGarageCanBeRented($garage, $vehicleType, $quote['start_date'], $quote['end_date']);
+
+                if ($plate !== null) {
+                    $this->ensurePlateNotBooked($plate, $quote['start_date'], $quote['end_date']);
+                }
+
+                $vehicle = $tenant->vehicles()->create([
                     'type' => $vehicleType,
                     'plate_number' => $plate,
                     'brand_model' => trim($data['brand_model']),
@@ -164,10 +148,14 @@ class RentalService
                     'garage_id' => $garage->id,
                     'vehicle_id' => $vehicle->id,
                     'payment_proof' => $proofPath,
-                    ...$quote->toRentalAttributes(),
+                    ...$quote,
+                    'start_date' => $quote['start_date']->toDateString(),
+                    'end_date' => $quote['end_date']->toDateString(),
                 ]);
 
-                $garage->update(['status' => GarageStatus::Used]);
+                if ($quote['start_date']->isSameDay($today)) {
+                    $garage->update(['status' => GarageStatus::Used]);
+                }
 
                 return $rental;
             });
@@ -178,16 +166,10 @@ class RentalService
         }
     }
 
-    /**
-     * Sewa milik penyewa, dipisah menjadi aktif dan riwayat (sudah selesai).
-     *
-     * @param  User  $tenant  Penyewa.
-     * @param  CarbonInterface|null  $today  Tanggal acuan; default hari ini.
-     * @return array{active: Collection<int, Rental>, history: Collection<int, Rental>}
-     */
+    // function untuk mengambil data sewa milik penyewa
     public function tenantRentals(User $tenant, ?CarbonInterface $today = null): array
     {
-        $today ??= today();
+        $today = $this->earliestStartDate($today);
 
         $rentals = $tenant->rentals()
             ->with(['garage', 'vehicle', 'extensions' => fn ($query) => $query->orderBy('created_at')])
@@ -195,18 +177,43 @@ class RentalService
             ->orderByDesc('id')
             ->get();
 
+        [$history, $current] = $rentals->partition(
+            fn (Rental $rental) => $rental->statusOn($today) === 'finished',
+        );
+
         return [
-            'active' => $rentals->filter(fn (Rental $rental) => $rental->isActiveOn($today))->values(),
-            'history' => $rentals->reject(fn (Rental $rental) => $rental->isActiveOn($today))->values(),
+            'current' => $current->sortBy('start_date')->values(),
+            'history' => $history->values(),
+            'today' => $today,
         ];
     }
 
-    /**
-     * Seragamkan format nomor plat: huruf besar, spasi tunggal ("b  1234cd" -> "B 1234 CD").
-     *
-     * @param  string|null  $plate  Nomor plat mentah.
-     * @return string|null Null jika kosong.
-     */
+    // function untuk mengambil daftar sewa untuk admin
+    public function paginateForAdmin(?string $status = null, ?string $search = null, ?CarbonInterface $today = null, int $perPage = 20): LengthAwarePaginator
+    {
+        $today = $this->earliestStartDate($today);
+        $search = $search !== null ? trim($search) : null;
+
+        return Rental::query()
+            ->with(['garage', 'user', 'vehicle'])
+            ->withCount('extensions')
+            ->withSum('extensions', 'cost')
+            ->when($status, fn ($query) => $query->withStatusOn($status, $today))
+            ->when($search, function ($query) use ($search) {
+                $like = '%'.$search.'%';
+                $query->where(function ($inner) use ($like) {
+                    $inner->whereHas('garage', fn ($q) => $q->where('code', 'like', $like))
+                        ->orWhereHas('user', fn ($q) => $q->where('name', 'like', $like)->orWhere('email', 'like', $like))
+                        ->orWhereHas('vehicle', fn ($q) => $q->where('plate_number', 'like', $like));
+                });
+            })
+            ->orderByDesc('start_date')
+            ->orderByDesc('id')
+            ->paginate($perPage)
+            ->withQueryString();
+    }
+
+    // function untuk merapikan format nomor plat
     public function normalizePlate(?string $plate): ?string
     {
         $plate = Str::upper(trim((string) $plate));
@@ -221,49 +228,38 @@ class RentalService
             : $plate;
     }
 
-    /**
-     * Pastikan garasi kompatibel dengan kendaraan dan tidak punya rental aktif.
-     *
-     * @param  Garage  $garage  Garasi (sudah dikunci).
-     * @param  VehicleType  $vehicleType  Tipe kendaraan.
-     * @param  CarbonInterface  $today  Tanggal mulai.
-     *
-     * @throws BusinessRuleException
-     */
-    private function ensureGarageCanBeRented(Garage $garage, VehicleType $vehicleType, CarbonInterface $today): void
+    // function untuk mengecek tanggal mulai sewa
+    private function ensureStartDateAllowed(CarbonImmutable $startDate, CarbonImmutable $today): void
     {
-        if (! $vehicleType->canUseGarage($garage->type)) {
-            throw new BusinessRuleException(
-                "Garasi {$garage->code} ({$garage->type->label()}) tidak dapat digunakan untuk {$vehicleType->label()}.",
-                'garage_id',
-            );
-        }
+        $latest = $this->latestStartDate($today);
 
-        if (! $garage->isAvailableOn($today)) {
-            throw new BusinessRuleException(
-                "Garasi {$garage->code} sudah disewa orang lain. Silakan pilih garasi lain.",
-                'garage_id',
-            );
+        if ($startDate->lt($today) || $startDate->gt($latest)) {
+            throw ValidationException::withMessages(['start_date' => 'Tanggal mulai harus antara '.$today->translatedFormat('d M Y').' dan '.$latest->translatedFormat('d M Y').'.']);
         }
     }
 
-    /**
-     * Pastikan nomor plat tidak sedang tercatat di rental aktif lain.
-     *
-     * @param  string  $plate  Nomor plat ternormalisasi.
-     * @param  CarbonInterface  $today  Tanggal acuan.
-     *
-     * @throws BusinessRuleException
-     */
-    private function ensurePlateNotInActiveRental(string $plate, CarbonInterface $today): void
+    // function untuk mengecek garasi bisa disewa atau tidak
+    private function ensureGarageCanBeRented(Garage $garage, VehicleType $vehicleType, CarbonInterface $start, CarbonInterface $end): void
+    {
+        if (! $vehicleType->canUseGarage($garage->type)) {
+            throw ValidationException::withMessages(['garage_id' => "Garasi {$garage->code} ({$garage->type->label()}) tidak dapat digunakan untuk {$vehicleType->label()}."]);
+        }
+
+        if (! $garage->isAvailableBetween($start, $end)) {
+            throw ValidationException::withMessages(['garage_id' => "Garasi {$garage->code} sudah disewa/dibooking pada periode tersebut. Silakan pilih garasi atau tanggal lain."]);
+        }
+    }
+
+    // function untuk mengecek nomor plat belum dipakai sewa lain
+    private function ensurePlateNotBooked(string $plate, CarbonInterface $start, CarbonInterface $end): void
     {
         $inUse = Rental::query()
-            ->activeOn($today)
+            ->overlapping($start, $end)
             ->whereHas('vehicle', fn ($query) => $query->where('plate_number', $plate))
             ->exists();
 
         if ($inUse) {
-            throw new BusinessRuleException("Kendaraan dengan plat {$plate} sedang menyewa garasi lain.", 'plate_number');
+            throw ValidationException::withMessages(['plate_number' => "Kendaraan dengan plat {$plate} sudah tercatat di sewa lain pada periode tersebut."]);
         }
     }
 }

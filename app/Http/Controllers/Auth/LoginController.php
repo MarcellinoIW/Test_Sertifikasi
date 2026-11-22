@@ -2,58 +2,50 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
-use App\Services\AuthService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
-/**
- * Menangani login dan logout pengguna.
- */
+// controller untuk login dan logout
 class LoginController extends Controller
 {
-    /**
-     * @param  AuthService  $authService  Service autentikasi.
-     */
-    public function __construct(private readonly AuthService $authService) {}
-
-    /**
-     * Tampilkan form login.
-     *
-     * @return View
-     */
+    // function untuk menampilkan halaman login
     public function create(): View
     {
         return view('auth.login');
     }
 
-    /**
-     * Proses login, lalu arahkan ke dashboard sesuai role.
-     *
-     * @param  LoginRequest  $request  Request login tervalidasi.
-     * @return RedirectResponse
-     *
-     * @throws ValidationException Jika login gagal atau terkena rate limit.
-     */
+    // function untuk proses login
     public function store(LoginRequest $request): RedirectResponse
     {
         $request->ensureIsNotRateLimited();
 
-        try {
-            $user = $this->authService->login(
-                $request->string('email'),
-                $request->string('password'),
-                $request->boolean('remember'),
-            );
-        } catch (ValidationException $e) {
+        $credentials = $request->only('email', 'password');
+
+        if (! Auth::validate($credentials)) {
             $request->hitRateLimiter();
 
-            throw $e;
+            throw ValidationException::withMessages(['email' => 'Email atau password salah.']);
         }
+
+        $user = Auth::getProvider()->retrieveByCredentials($credentials);
+
+        if (! $user->isApproved()) {
+            $request->hitRateLimiter();
+
+            throw ValidationException::withMessages([
+                'email' => $user->status === UserStatus::Pending
+                    ? 'Akun Anda masih menunggu verifikasi admin. Silakan coba lagi setelah disetujui.'
+                    : 'Pendaftaran akun Anda ditolak. Silakan hubungi admin untuk informasi lebih lanjut.',
+            ]);
+        }
+
+        Auth::login($user, $request->boolean('remember'));
 
         $request->clearRateLimiter();
         $request->session()->regenerate();
@@ -62,12 +54,7 @@ class LoginController extends Controller
             ->with('success', "Selamat datang, {$user->name}!");
     }
 
-    /**
-     * Logout dan hapus sesi.
-     *
-     * @param  Request  $request  Request saat ini.
-     * @return RedirectResponse
-     */
+    // function untuk logout
     public function destroy(Request $request): RedirectResponse
     {
         Auth::logout();

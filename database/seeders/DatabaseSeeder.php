@@ -4,14 +4,10 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 
-/**
- * Seeder utama: admin (wajib) lalu data demo.
- */
+// seeder utama yang menjalankan semua seeder
 class DatabaseSeeder extends Seeder
 {
-    /**
-     * Jalankan seluruh seeder aplikasi.
-     */
+    // function untuk menjalankan semua seeder
     public function run(): void
     {
         $this->call([

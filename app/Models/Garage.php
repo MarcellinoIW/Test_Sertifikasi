@@ -5,32 +5,17 @@ namespace App\Models;
 use App\Enums\GarageStatus;
 use App\Enums\GarageType;
 use Carbon\CarbonInterface;
-use Database\Factories\GarageFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/**
- * Unit garasi yang dapat disewa. Satu garasi hanya untuk satu kendaraan.
- *
- * @property int $id
- * @property string $code
- * @property GarageType $type
- * @property string $daily_price
- * @property string|null $electricity_price_per_kwh
- * @property GarageStatus $status
- */
+// model untuk data garasi
 class Garage extends Model
 {
-    /** @use HasFactory<GarageFactory> */
     use HasFactory;
 
-    /**
-     * Atribut yang boleh diisi secara massal.
-     *
-     * @var list<string>
-     */
+    // kolom yang boleh diisi
     protected $fillable = [
         'code',
         'type',
@@ -39,11 +24,7 @@ class Garage extends Model
         'status',
     ];
 
-    /**
-     * Konversi tipe atribut.
-     *
-     * @return array<string, string>
-     */
+    // function untuk mengatur tipe data kolom
     protected function casts(): array
     {
         return [
@@ -54,58 +35,43 @@ class Garage extends Model
         ];
     }
 
-    /**
-     * Seluruh sewa yang pernah terjadi pada garasi ini.
-     *
-     * @return HasMany<Rental, $this>
-     */
+    // function relasi garasi ke data sewa
     public function rentals(): HasMany
     {
         return $this->hasMany(Rental::class);
     }
 
-    /**
-     * Scope: filter berdasarkan tipe garasi.
-     *
-     * @param  Builder<Garage>  $query
-     * @param  GarageType|string  $type  Tipe garasi (enum atau nilai string-nya).
-     * @return Builder<Garage>
-     */
+    // function untuk filter garasi berdasarkan tipe
     public function scopeOfType(Builder $query, GarageType|string $type): Builder
     {
         return $query->where('type', $type instanceof GarageType ? $type->value : $type);
     }
 
-    /**
-     * Scope: garasi yang tidak memiliki rental aktif pada tanggal tertentu.
-     *
-     * @param  Builder<Garage>  $query
-     * @param  CarbonInterface  $date  Tanggal acuan.
-     * @return Builder<Garage>
-     */
+    // function untuk filter garasi yang kosong pada tanggal tertentu
     public function scopeAvailableOn(Builder $query, CarbonInterface $date): Builder
     {
         return $query->whereDoesntHave('rentals', fn (Builder $rental) => $rental->activeOn($date));
     }
 
-    /**
-     * Scope: garasi yang memiliki rental aktif pada tanggal tertentu.
-     *
-     * @param  Builder<Garage>  $query
-     * @param  CarbonInterface  $date  Tanggal acuan.
-     * @return Builder<Garage>
-     */
+    // function untuk filter garasi yang kosong pada periode tertentu
+    public function scopeAvailableBetween(Builder $query, CarbonInterface $start, CarbonInterface $end): Builder
+    {
+        return $query->whereDoesntHave('rentals', fn (Builder $rental) => $rental->overlapping($start, $end));
+    }
+
+    // function untuk mengecek garasi kosong pada periode tertentu
+    public function isAvailableBetween(CarbonInterface $start, CarbonInterface $end): bool
+    {
+        return ! $this->rentals()->overlapping($start, $end)->exists();
+    }
+
+    // function untuk filter garasi yang sedang dipakai pada tanggal tertentu
     public function scopeOccupiedOn(Builder $query, CarbonInterface $date): Builder
     {
         return $query->whereHas('rentals', fn (Builder $rental) => $rental->activeOn($date));
     }
 
-    /**
-     * Apakah garasi tersedia (tanpa rental aktif) pada tanggal tertentu.
-     *
-     * @param  CarbonInterface  $date  Tanggal acuan.
-     * @return bool
-     */
+    // function untuk mengecek garasi kosong pada tanggal tertentu
     public function isAvailableOn(CarbonInterface $date): bool
     {
         return ! $this->rentals()->activeOn($date)->exists();

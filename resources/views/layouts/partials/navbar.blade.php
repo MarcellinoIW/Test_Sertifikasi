@@ -9,6 +9,7 @@
         $user?->isAdmin() => [
             ['admin.dashboard', 'admin.dashboard', 'speedometer2', 'Dashboard'],
             ['admin.garages.index', 'admin.garages.*', 'house-door', 'Garasi'],
+            ['admin.rentals.index', 'admin.rentals.*', 'receipt', 'Data Sewa'],
             ['admin.tenants.index', 'admin.tenants.*', 'person-check', 'Verifikasi Penyewa'],
             ['admin.extensions.index', 'admin.extensions.*', 'calendar-plus', 'Perpanjang Sewa'],
             ['admin.reports.index', 'admin.reports.*', 'bar-chart-line', 'Laporan'],

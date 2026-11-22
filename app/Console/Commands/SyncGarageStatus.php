@@ -2,38 +2,22 @@
 
 namespace App\Console\Commands;
 
-use App\Services\GarageStatusService;
+use App\Services\GarageService;
 use Illuminate\Console\Command;
 
-/**
- * Menyinkronkan status garasi (available/used) dengan rental aktif hari ini.
- * Dijadwalkan harian di routes/console.php.
- */
+// command untuk menyesuaikan status garasi setiap hari
 class SyncGarageStatus extends Command
 {
-    /**
-     * Nama dan signature command.
-     *
-     * @var string
-     */
+    // nama command yang dipanggil di terminal
     protected $signature = 'garages:sync-status';
 
-    /**
-     * Deskripsi command.
-     *
-     * @var string
-     */
+    // keterangan command
     protected $description = 'Sinkronkan status garasi (available/used) berdasarkan rental aktif hari ini';
 
-    /**
-     * Jalankan command.
-     *
-     * @param  GarageStatusService  $statusService  Service sinkronisasi status garasi.
-     * @return int
-     */
-    public function handle(GarageStatusService $statusService): int
+    // function untuk menjalankan sinkron status garasi
+    public function handle(GarageService $garageService): int
     {
-        $result = $statusService->sync();
+        $result = $garageService->syncStatus();
 
         $this->info("Status garasi disinkronkan: {$result['available']} menjadi available, {$result['used']} menjadi used.");
 

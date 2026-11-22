@@ -9,25 +9,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
-/**
- * Membatasi akses route berdasarkan role pengguna.
- *
- * Pemakaian: ->middleware('role:admin') atau ->middleware('role:tenant').
- * Penyewa yang statusnya tidak lagi approved akan otomatis di-logout.
- */
+// middleware untuk membatasi halaman sesuai role user
 class EnsureUserHasRole
 {
-    /**
-     * Tangani request yang masuk.
-     *
-     * @param  Request  $request  Request saat ini.
-     * @param  Closure(Request): Response  $next  Middleware berikutnya.
-     * @param  string  $role  Role yang diizinkan (nilai enum UserRole).
-     * @return Response
-     */
+    // function untuk mengecek role user sebelum masuk halaman
     public function handle(Request $request, Closure $next, string $role): Response
     {
-        /** @var User|null $user */
         $user = $request->user();
 
         if ($user === null) {

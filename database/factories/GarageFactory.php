@@ -7,28 +7,13 @@ use App\Enums\GarageType;
 use App\Models\Garage;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * Factory untuk model Garage. Default: garasi mobil (C) Rp 20.000/hari.
- *
- * Kode garasi dibuat berurutan per tipe. Untuk kode spesifik (misal di
- * test generator kode) berikan atribut `code` secara eksplisit.
- *
- * @extends Factory<Garage>
- */
+// factory untuk membuat data garasi palsu
 class GarageFactory extends Factory
 {
-    /**
-     * Penghitung nomor urut terakhir per prefix selama proses berjalan.
-     *
-     * @var array<string, int>
-     */
+    // penghitung nomor kode garasi terakhir
     protected static array $sequence = [];
 
-    /**
-     * Definisi atribut default.
-     *
-     * @return array<string, mixed>
-     */
+    // function untuk data default factory
     public function definition(): array
     {
         return [
@@ -40,11 +25,7 @@ class GarageFactory extends Factory
         ];
     }
 
-    /**
-     * State: garasi sepeda (S).
-     *
-     * @return static
-     */
+    // function untuk membuat data garasi sepeda
     public function bicycle(): static
     {
         return $this->state(fn () => [
@@ -54,11 +35,7 @@ class GarageFactory extends Factory
         ]);
     }
 
-    /**
-     * State: garasi mobil (C).
-     *
-     * @return static
-     */
+    // function untuk membuat data garasi mobil
     public function car(): static
     {
         return $this->state(fn () => [
@@ -68,11 +45,7 @@ class GarageFactory extends Factory
         ]);
     }
 
-    /**
-     * State: garasi mobil listrik (E) dengan harga isi listrik per kWh.
-     *
-     * @return static
-     */
+    // function untuk membuat data garasi mobil listrik
     public function electric(): static
     {
         return $this->state(fn () => [
@@ -82,23 +55,13 @@ class GarageFactory extends Factory
         ]);
     }
 
-    /**
-     * State: garasi berstatus terpakai.
-     *
-     * @return static
-     */
+    // function untuk membuat data garasi yang sedang dipakai
     public function used(): static
     {
         return $this->state(fn () => ['status' => GarageStatus::Used]);
     }
 
-    /**
-     * Menghasilkan kode berikutnya untuk tipe garasi, melanjutkan nomor
-     * terbesar yang ada di database maupun yang sudah dibuat factory.
-     *
-     * @param  GarageType|string  $type  Tipe garasi.
-     * @return string Kode garasi, misal "C001".
-     */
+    // function untuk membuat kode garasi berikutnya
     protected static function nextCode(GarageType|string $type): string
     {
         $type = $type instanceof GarageType ? $type : GarageType::from($type);

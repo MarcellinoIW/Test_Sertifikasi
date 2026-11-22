@@ -8,9 +8,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Membuat tabel garages.
-     */
+    // function untuk membuat tabel garages
     public function up(): void
     {
         Schema::create('garages', function (Blueprint $table) {
@@ -26,9 +24,7 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Menghapus tabel garages.
-     */
+    // function untuk menghapus tabel garages
     public function down(): void
     {
         Schema::dropIfExists('garages');

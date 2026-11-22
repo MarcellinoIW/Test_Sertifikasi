@@ -2,10 +2,7 @@
 
 namespace App\Enums;
 
-/**
- * Tipe kendaraan penyewa, sekaligus satu-satunya sumber aturan
- * kompatibilitas kendaraan dengan tipe garasi.
- */
+// enum untuk tipe kendaraan dan aturan garasi yang boleh dipakai
 enum VehicleType: string
 {
     case Bicycle = 'bicycle';
@@ -13,11 +10,7 @@ enum VehicleType: string
     case Car = 'car';
     case ElectricCar = 'electric_car';
 
-    /**
-     * Label berbahasa Indonesia untuk ditampilkan di UI.
-     *
-     * @return string
-     */
+    // function untuk menampilkan label dalam bahasa Indonesia
     public function label(): string
     {
         return match ($this) {
@@ -28,15 +21,7 @@ enum VehicleType: string
         };
     }
 
-    /**
-     * Tipe garasi yang boleh ditempati kendaraan ini.
-     *
-     * - Garasi Sepeda (S): sepeda, sepeda motor
-     * - Garasi Mobil (C): mobil, mobil listrik
-     * - Garasi Mobil Listrik (E): mobil listrik saja
-     *
-     * @return array<int, GarageType>
-     */
+    // function untuk mengambil tipe garasi yang boleh dipakai kendaraan ini
     public function allowedGarageTypes(): array
     {
         return match ($this) {
@@ -46,42 +31,25 @@ enum VehicleType: string
         };
     }
 
-    /**
-     * Apakah kendaraan ini boleh menempati garasi bertipe tertentu.
-     *
-     * @param  GarageType  $garageType  Tipe garasi yang akan dicek.
-     * @return bool
-     */
+    // function untuk mengecek kendaraan boleh masuk garasi tertentu atau tidak
     public function canUseGarage(GarageType $garageType): bool
     {
         return in_array($garageType, $this->allowedGarageTypes(), true);
     }
 
-    /**
-     * Apakah nomor plat wajib diisi (semua kendaraan kecuali sepeda).
-     *
-     * @return bool
-     */
+    // function untuk mengecek kendaraan wajib punya nomor plat atau tidak
     public function requiresPlate(): bool
     {
         return $this !== self::Bicycle;
     }
 
-    /**
-     * Apakah kendaraan ini mobil listrik (memiliki baterai).
-     *
-     * @return bool
-     */
+    // function untuk mengecek kendaraan termasuk mobil listrik atau tidak
     public function isElectric(): bool
     {
         return $this === self::ElectricCar;
     }
 
-    /**
-     * Daftar nilai enum, berguna untuk aturan validasi `in:`.
-     *
-     * @return array<int, string>
-     */
+    // function untuk mengambil semua nilai enum
     public static function values(): array
     {
         return array_column(self::cases(), 'value');

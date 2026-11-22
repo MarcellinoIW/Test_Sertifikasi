@@ -43,3 +43,18 @@ describe('Prefix kode garasi', function () {
             ->and(GarageType::Electric->prefix())->toBe('E');
     });
 });
+
+describe('Fasilitas isi listrik', function () {
+    it('hanya garasi mobil listrik (E) yang punya fasilitas isi listrik', function () {
+        expect(GarageType::Electric->hasCharging())->toBeTrue()
+            ->and(GarageType::Car->hasCharging())->toBeFalse()
+            ->and(GarageType::Bicycle->hasCharging())->toBeFalse();
+    });
+
+    it('hanya mobil listrik yang termasuk kendaraan listrik', function () {
+        expect(VehicleType::ElectricCar->isElectric())->toBeTrue()
+            ->and(VehicleType::Car->isElectric())->toBeFalse()
+            ->and(VehicleType::Motorcycle->isElectric())->toBeFalse()
+            ->and(VehicleType::Bicycle->isElectric())->toBeFalse();
+    });
+});

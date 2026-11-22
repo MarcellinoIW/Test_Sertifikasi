@@ -84,7 +84,11 @@
                         <tbody>
                             @forelse ($latest_rentals as $rental)
                                 <tr>
-                                    <td><span class="badge text-bg-primary">{{ $rental->garage->code }}</span></td>
+                                    <td>
+                                        <a href="{{ route('admin.rentals.show', $rental) }}" class="text-decoration-none" title="Lihat detail & bukti bayar">
+                                            <span class="badge text-bg-primary">{{ $rental->garage->code }}</span>
+                                        </a>
+                                    </td>
                                     <td>
                                         {{ $rental->user->name }}
                                         <div class="small text-muted">{{ $rental->vehicle->displayName() }}</div>

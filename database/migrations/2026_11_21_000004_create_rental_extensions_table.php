@@ -6,9 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Membuat tabel rental_extensions (riwayat perpanjangan sewa oleh admin).
-     */
+    // function untuk membuat tabel rental_extensions
     public function up(): void
     {
         Schema::create('rental_extensions', function (Blueprint $table) {
@@ -28,9 +26,7 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Menghapus tabel rental_extensions.
-     */
+    // function untuk menghapus tabel rental_extensions
     public function down(): void
     {
         Schema::dropIfExists('rental_extensions');

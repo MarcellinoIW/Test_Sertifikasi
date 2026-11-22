@@ -1,4 +1,4 @@
-{{-- Tabel sewa penyewa beserta riwayat perpanjangannya. Variabel: $rentals, $emptyText --}}
+{{-- Tabel sewa penyewa beserta status & riwayat perpanjangannya. Variabel: $rentals, $emptyText, $today --}}
 <div class="table-responsive">
     <table class="table mb-0">
         <thead class="table-light">
@@ -8,12 +8,14 @@
                 <th>Jenis</th>
                 <th>Mulai</th>
                 <th>Selesai</th>
+                <th>Status</th>
                 <th class="text-end">Total Bayar</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
             @forelse ($rentals as $rental)
+                @php $status = $rental->statusOn($today); @endphp
                 <tr>
                     <td>
                         <span class="badge text-bg-primary">{{ $rental->garage->code }}</span>
@@ -30,6 +32,7 @@
                             </span>
                         @endif
                     </td>
+                    <td><x-rental-status :status="$status" /></td>
                     <td class="text-end">@rupiah($rental->grandTotal())</td>
                     <td class="text-end">
                         <a href="{{ route('tenant.rentals.show', $rental) }}" class="btn btn-sm btn-outline-primary">Detail</a>
@@ -43,14 +46,14 @@
                             Perpanjangan @tanggal($extension->created_at): +{{ $extension->additional_days }} hari
                             ({{ $extension->monthly_blocks }} bulan + {{ $extension->daily_days }} hari harian)
                         </td>
-                        <td class="text-muted">@tanggal($extension->old_end_date) → @tanggal($extension->new_end_date)</td>
+                        <td colspan="2" class="text-muted">@tanggal($extension->old_end_date) → @tanggal($extension->new_end_date)</td>
                         <td class="text-end text-muted">@rupiah($extension->cost)</td>
                         <td></td>
                     </tr>
                 @endforeach
             @empty
                 <tr>
-                    <td colspan="7" class="text-center text-muted py-4">{{ $emptyText }}</td>
+                    <td colspan="8" class="text-center text-muted py-4">{{ $emptyText }}</td>
                 </tr>
             @endforelse
         </tbody>

@@ -1,6 +1,5 @@
 <?php
 
-use App\Exceptions\BusinessRuleException;
 use App\Http\Middleware\EnsureUserHasRole;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,10 +22,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectUsersTo(fn (Request $request) => route($request->user()->homeRoute()));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        // Pelanggaran aturan bisnis adalah validasi biasa (sudah ditampilkan ke
-        // pengguna), bukan error sistem, jadi tidak perlu dicatat di laravel.log.
-        $exceptions->dontReport(BusinessRuleException::class);
-
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );

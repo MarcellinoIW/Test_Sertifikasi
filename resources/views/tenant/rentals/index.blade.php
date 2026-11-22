@@ -12,15 +12,15 @@
 @section('content')
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-header bg-white fw-semibold">
-            <i class="bi bi-house-check me-1 text-success"></i> Sewa Aktif
-            <span class="badge text-bg-success ms-1">{{ $active->count() }}</span>
+            <i class="bi bi-house-check me-1 text-success"></i> Sewa Aktif &amp; Akan Datang
+            <span class="badge text-bg-success ms-1">{{ $current->count() }}</span>
         </div>
-        @include('tenant.rentals._table', ['rentals' => $active, 'emptyText' => 'Tidak ada sewa aktif.'])
+        @include('tenant.rentals._table', ['rentals' => $current, 'emptyText' => 'Tidak ada sewa aktif atau yang akan datang.'])
     </div>
 
     <div class="card border-0 shadow-sm">
         <div class="card-header bg-white fw-semibold">
-            <i class="bi bi-clock-history me-1 text-secondary"></i> Riwayat Sewa
+            <i class="bi bi-clock-history me-1 text-secondary"></i> Riwayat Sewa (Selesai)
             <span class="badge text-bg-secondary ms-1">{{ $history->count() }}</span>
         </div>
         @include('tenant.rentals._table', ['rentals' => $history, 'emptyText' => 'Belum ada riwayat sewa.'])

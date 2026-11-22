@@ -5,59 +5,51 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\GarageStatus;
 use App\Enums\GarageType;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\GarageFilterRequest;
 use App\Http\Requests\Admin\StoreGarageBatchRequest;
-use App\Services\GarageCodeGenerator;
 use App\Services\GarageService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
-/**
- * Pengelolaan garasi oleh admin: daftar dan pembuatan batch.
- */
+// controller untuk kelola data garasi
 class GarageController extends Controller
 {
-    /**
-     * @param  GarageService  $garageService  Service garasi.
-     */
+    // function constructor untuk memanggil GarageService
     public function __construct(private readonly GarageService $garageService) {}
 
-    /**
-     * Daftar garasi dengan filter tipe dan status.
-     *
-     * @param  GarageFilterRequest  $request  Filter tervalidasi.
-     * @return View
-     */
-    public function index(GarageFilterRequest $request): View
+    // function untuk menampilkan daftar garasi beserta filternya
+    public function index(Request $request): View
     {
+        $request->validate([
+            'type' => ['nullable', Rule::enum(GarageType::class)],
+            'status' => ['nullable', Rule::enum(GarageStatus::class)],
+        ], [
+            'type.enum' => 'Filter tipe garasi tidak valid.',
+            'status.enum' => 'Filter status garasi tidak valid.',
+        ]);
+
         return view('admin.garages.index', [
-            'garages' => $this->garageService->paginate($request->garageType(), $request->garageStatus()),
+            'garages' => $this->garageService->paginate(
+                $request->enum('type', GarageType::class),
+                $request->enum('status', GarageStatus::class),
+            ),
             'types' => GarageType::cases(),
             'statuses' => GarageStatus::cases(),
         ]);
     }
 
-    /**
-     * Form pembuatan garasi batch.
-     *
-     * @param  GarageCodeGenerator  $codeGenerator  Untuk preview kode berikutnya.
-     * @return View
-     */
-    public function create(GarageCodeGenerator $codeGenerator): View
+    // function untuk menampilkan form tambah garasi
+    public function create(): View
     {
         return view('admin.garages.create', [
             'types' => GarageType::cases(),
-            'lastNumbers' => $codeGenerator->lastNumbers(),
+            'lastNumbers' => $this->garageService->lastNumbers(),
             'maxNumber' => (int) config('garasi.max_garages_per_batch'),
         ]);
     }
 
-    /**
-     * Simpan garasi batch.
-     *
-     * @param  StoreGarageBatchRequest  $request  Request tervalidasi.
-     * @return RedirectResponse
-     */
+    // function untuk menyimpan data garasi baru
     public function store(StoreGarageBatchRequest $request): RedirectResponse
     {
         $garages = $this->garageService->createBatch(

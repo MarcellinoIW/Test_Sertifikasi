@@ -6,51 +6,44 @@ use App\Enums\GarageType;
 use App\Enums\RentalType;
 use App\Enums\VehicleType;
 use App\Models\Garage;
+use App\Models\Vehicle;
 use App\Services\RentalPriceCalculator;
+use App\Services\RentalService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
-/**
- * Validasi form sewa garasi baru. Aturan bisnis yang bergantung pada
- * kondisi DB terkini (garasi masih tersedia, plat tidak dipakai) dicek
- * ulang di RentalService di dalam transaksi.
- */
+// request untuk validasi form sewa garasi
 class StoreRentalRequest extends FormRequest
 {
-    /**
-     * Pola nomor plat Indonesia, misal "B 1234 CD", "D 12 A", "AB 1234".
-     */
-    private const PLATE_PATTERN = '/^[A-Za-z]{1,2}\s*\d{1,4}(\s*[A-Za-z]{1,3})?$/';
-
-    /**
-     * Hanya penyewa (sudah dijamin middleware role:tenant).
-     *
-     * @return bool
-     */
+    // function untuk mengecek user boleh pakai request ini
     public function authorize(): bool
     {
         return $this->user()?->isTenant() ?? false;
     }
 
-    /**
-     * Aturan validasi.
-     *
-     * @return array<string, array<int, mixed>>
-     */
+    // function untuk aturan validasi form sewa garasi
     public function rules(): array
     {
         $vehicleType = $this->vehicleType();
         $calculator = app(RentalPriceCalculator::class);
+        $rentalService = app(RentalService::class);
 
         return [
+            'start_date' => [
+                'required',
+                'date_format:Y-m-d',
+                'after_or_equal:'.$rentalService->earliestStartDate()->toDateString(),
+                'before_or_equal:'.$rentalService->latestStartDate()->toDateString(),
+            ],
             'vehicle_type' => ['required', Rule::enum(VehicleType::class)],
             'plate_number' => [
                 Rule::requiredIf(fn () => $vehicleType?->requiresPlate() ?? false),
                 'nullable',
                 'string',
                 'max:15',
-                'regex:'.self::PLATE_PATTERN,
+                'regex:'.Vehicle::PLATE_PATTERN,
             ],
             'brand_model' => ['required', 'string', 'max:100'],
             'battery_remaining_kwh' => [
@@ -61,27 +54,23 @@ class StoreRentalRequest extends FormRequest
                 'max:'.$calculator->batteryCapacityKwh(),
             ],
             'rental_type' => ['required', Rule::enum(RentalType::class)],
-            // Jumlah hari hanya divalidasi untuk sewa harian. Untuk bulanan field ini
-            // dikecualikan dari data tervalidasi; jumlah hari = jumlah hari bulan berjalan
-            // dan dihitung oleh RentalPriceCalculator.
+            // Jumlah hari hanya divalidasi untuk sewa harian, dengan batas mengikuti
+            // BULAN TANGGAL MULAI. Untuk bulanan field ini (disabled di form) dikecualikan;
+            // jumlah hari = jumlah hari bulan tanggal mulai, dihitung RentalPriceCalculator.
             'days' => [
                 Rule::excludeIf(fn () => $this->input('rental_type') === RentalType::Monthly->value),
                 'required',
                 'integer',
                 'min:1',
-                'max:'.$calculator->maxDailyDays(today()),
+                'max:'.$calculator->maxDailyDays($this->startDateOrToday()),
             ],
             'garage_type' => ['required', Rule::enum(GarageType::class)],
             'garage_id' => ['required', 'integer', Rule::exists('garages', 'id')],
-            'payment_proof' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:2048'],
+            'payment_proof' => ['required', 'image', 'mimes:jpg,jpeg,png', 'max:'.config('garasi.max_upload_kb')],
         ];
     }
 
-    /**
-     * Validasi tambahan: kompatibilitas tipe kendaraan, tipe garasi, dan garasi yang dipilih.
-     *
-     * @return array<int, callable>
-     */
+    // function untuk validasi tambahan (cek kendaraan cocok dengan tipe garasi)
     public function after(): array
     {
         return [
@@ -110,13 +99,12 @@ class StoreRentalRequest extends FormRequest
         ];
     }
 
-    /**
-     * Pesan error berbahasa Indonesia.
-     *
-     * @return array<string, string>
-     */
+    // function untuk pesan error validasi
     public function messages(): array
     {
+        // Label batas upload dari config, misal 5120 KB -> "5MB".
+        $maxSize = str_replace('.', ',', (string) (config('garasi.max_upload_kb') / 1024)).'MB';
+
         return [
             'vehicle_type.required' => 'Tipe kendaraan wajib dipilih.',
             'vehicle_type.enum' => 'Tipe kendaraan tidak valid.',
@@ -134,25 +122,35 @@ class StoreRentalRequest extends FormRequest
             'days.required' => 'Jumlah hari wajib diisi untuk sewa harian.',
             'days.integer' => 'Jumlah hari harus berupa bilangan bulat.',
             'days.min' => 'Jumlah hari minimal :min hari.',
-            'days.max' => 'Jumlah hari sewa harian maksimal :max hari untuk bulan ini.',
+            'days.max' => 'Jumlah hari sewa harian maksimal :max hari untuk bulan tanggal mulai.',
+            'start_date.required' => 'Tanggal mulai wajib diisi.',
+            'start_date.date_format' => 'Format tanggal mulai tidak valid.',
+            'start_date.after_or_equal' => 'Tanggal mulai tidak boleh sebelum hari ini.',
+            'start_date.before_or_equal' => 'Tanggal mulai paling lambat '.config('garasi.max_start_days_ahead').' hari dari hari ini.',
             'garage_type.required' => 'Tipe garasi wajib dipilih.',
             'garage_type.enum' => 'Tipe garasi tidak valid.',
             'garage_id.required' => 'Silakan pilih garasi.',
             'garage_id.exists' => 'Garasi yang dipilih tidak ditemukan.',
             'payment_proof.required' => 'Bukti pelunasan wajib diunggah.',
+            'payment_proof.uploaded' => 'Bukti pelunasan gagal diunggah. Pastikan ukurannya maksimal '.$maxSize.'.',
             'payment_proof.image' => 'Bukti pelunasan harus berupa gambar.',
             'payment_proof.mimes' => 'Bukti pelunasan harus berformat JPG, JPEG, atau PNG.',
-            'payment_proof.max' => 'Ukuran bukti pelunasan maksimal 2 MB.',
+            'payment_proof.max' => 'Ukuran file maksimal '.$maxSize.'.',
         ];
     }
 
-    /**
-     * Tipe kendaraan dari input (null jika belum valid).
-     *
-     * @return VehicleType|null
-     */
+    // function untuk mengambil tipe kendaraan yang dipilih
     public function vehicleType(): ?VehicleType
     {
         return VehicleType::tryFrom((string) $this->input('vehicle_type'));
+    }
+
+    // function untuk mengambil tanggal mulai sewa (default hari ini)
+    public function startDateOrToday(): CarbonImmutable
+    {
+        $value = (string) $this->input('start_date');
+        $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? CarbonImmutable::createFromFormat('!Y-m-d', $value) : false;
+
+        return $date ?: CarbonImmutable::today();
     }
 }

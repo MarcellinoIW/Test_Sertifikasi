@@ -4,21 +4,12 @@ namespace Database\Factories;
 
 use App\Enums\VehicleType;
 use App\Models\User;
-use App\Models\Vehicle;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * Factory untuk model Vehicle. Default: mobil bensin berplat nomor.
- *
- * @extends Factory<Vehicle>
- */
+// factory untuk membuat data kendaraan palsu
 class VehicleFactory extends Factory
 {
-    /**
-     * Definisi atribut default.
-     *
-     * @return array<string, mixed>
-     */
+    // function untuk data default factory
     public function definition(): array
     {
         return [
@@ -30,11 +21,7 @@ class VehicleFactory extends Factory
         ];
     }
 
-    /**
-     * State: sepeda (tanpa plat nomor).
-     *
-     * @return static
-     */
+    // function untuk membuat data sepeda
     public function bicycle(): static
     {
         return $this->state(fn () => [
@@ -45,11 +32,7 @@ class VehicleFactory extends Factory
         ]);
     }
 
-    /**
-     * State: sepeda motor.
-     *
-     * @return static
-     */
+    // function untuk membuat data sepeda motor
     public function motorcycle(): static
     {
         return $this->state(fn () => [
@@ -60,11 +43,7 @@ class VehicleFactory extends Factory
         ]);
     }
 
-    /**
-     * State: mobil bensin.
-     *
-     * @return static
-     */
+    // function untuk membuat data mobil
     public function car(): static
     {
         return $this->state(fn () => [
@@ -73,11 +52,7 @@ class VehicleFactory extends Factory
         ]);
     }
 
-    /**
-     * State: mobil listrik dengan kapasitas baterai dari config.
-     *
-     * @return static
-     */
+    // function untuk membuat data mobil listrik
     public function electricCar(): static
     {
         return $this->state(fn () => [
@@ -88,11 +63,7 @@ class VehicleFactory extends Factory
         ]);
     }
 
-    /**
-     * Membuat nomor plat acak bergaya Indonesia, misal "B 1234 XYZ".
-     *
-     * @return string
-     */
+    // function untuk membuat nomor plat acak
     protected static function fakePlate(): string
     {
         return fake()->unique()->regexify('[A-Z]{1,2} [1-9][0-9]{3} [A-Z]{2,3}');

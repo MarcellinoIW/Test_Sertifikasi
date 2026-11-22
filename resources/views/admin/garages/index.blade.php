@@ -81,7 +81,7 @@
                             </td>
                             <td>
                                 @if ($rental)
-                                    {{ $rental->user->name }}
+                                    <a href="{{ route('admin.rentals.show', $rental) }}">{{ $rental->user->name }}</a>
                                     <div class="small text-muted">
                                         {{ $rental->vehicle->displayName() }} · s.d. @tanggal($rental->end_date)
                                     </div>
